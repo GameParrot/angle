@@ -211,6 +211,7 @@ egl::Error WindowSurfaceCGL::initialize(const egl::Display *display)
     mSwapLayer = [[WebSwapLayer alloc] initWithSharedState:&mSwapState
                                                withContext:mContext
                                              withFunctions:mFunctions];
+    mSwapLayer.contentsScale = mLayer.contentsScale;
     [mLayer addSublayer:mSwapLayer];
 
     mFunctions->genRenderbuffers(1, &mDSRenderbuffer);
@@ -243,7 +244,7 @@ egl::Error WindowSurfaceCGL::swap(const gl::Context *context)
     unsigned height = getHeight();
     auto &texture   = *mSwapState.beingRendered;
 
-    if (texture.width != width || texture.height != height)
+    if (mSwapLayer.contentsScale != mLayer.contentsScale || texture.width != width || texture.height != height)
     {
         stateManager->bindTexture(gl::TextureType::_2D, texture.texture);
         functions->texImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA,
@@ -254,6 +255,7 @@ egl::Error WindowSurfaceCGL::swap(const gl::Context *context)
 
         texture.width  = width;
         texture.height = height;
+        mSwapLayer.contentsScale = mLayer.contentsScale;
     }
 
     FramebufferGL *framebufferGL = GetImplAs<FramebufferGL>(context->getFramebuffer({0}));
@@ -301,12 +303,12 @@ void WindowSurfaceCGL::setSwapInterval(EGLint interval)
 
 EGLint WindowSurfaceCGL::getWidth() const
 {
-    return (EGLint)CGRectGetWidth([mLayer frame]);
+    return (EGLint)(CGRectGetWidth([mLayer frame]) * mLayer.contentsScale);
 }
 
 EGLint WindowSurfaceCGL::getHeight() const
 {
-    return (EGLint)CGRectGetHeight([mLayer frame]);
+    return (EGLint)(CGRectGetHeight([mLayer frame]) * mLayer.contentsScale);
 }
 
 EGLint WindowSurfaceCGL::isPostSubBufferSupported() const
