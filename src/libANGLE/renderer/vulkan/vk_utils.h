@@ -13,6 +13,7 @@
 #include <atomic>
 #include <limits>
 
+#include "GLSLANG/ShaderLang.h"
 #include "common/FixedVector.h"
 #include "common/Optional.h"
 #include "common/PackedEnums.h"
@@ -22,6 +23,7 @@
 #include "libANGLE/renderer/serial_utils.h"
 #include "libANGLE/renderer/vulkan/SecondaryCommandBuffer.h"
 #include "libANGLE/renderer/vulkan/vk_wrapper.h"
+#include "vulkan/vulkan_fuchsia_ext.h"
 
 #define ANGLE_GL_OBJECTS_X(PROC) \
     PROC(Buffer)                 \
@@ -103,20 +105,20 @@ namespace vk
 {
 struct Format;
 
-// Append ptr to end of pNext chain beginning at chainStart
+// Prepend ptr to the pNext chain at chainStart
 template <typename VulkanStruct1, typename VulkanStruct2>
-void AppendToPNextChain(VulkanStruct1 *chainStart, VulkanStruct2 *ptr)
+void AddToPNextChain(VulkanStruct1 *chainStart, VulkanStruct2 *ptr)
 {
+    ASSERT(ptr->pNext == nullptr);
+
     VkBaseOutStructure *localPtr = reinterpret_cast<VkBaseOutStructure *>(chainStart);
-    while (localPtr->pNext)
-    {
-        localPtr = localPtr->pNext;
-    }
-    localPtr->pNext = reinterpret_cast<VkBaseOutStructure *>(ptr);
+    ptr->pNext                   = localPtr->pNext;
+    localPtr->pNext              = reinterpret_cast<VkBaseOutStructure *>(ptr);
 }
 
 extern const char *gLoaderLayersPathEnv;
 extern const char *gLoaderICDFilenamesEnv;
+extern const char *gANGLEPreferredDevice;
 
 enum class ICD
 {
@@ -279,8 +281,8 @@ using GarbageList = std::vector<GarbageObject>;
 // A list of garbage objects and the associated serial after which the objects can be destroyed.
 using GarbageAndSerial = ObjectAndSerial<GarbageList>;
 
-// Houses multiple lists of garbage objects. Each sub-list has a different lifetime. They should
-// be sorted such that later-living garbage is ordered later in the list.
+// Houses multiple lists of garbage objects. Each sub-list has a different lifetime. They should be
+// sorted such that later-living garbage is ordered later in the list.
 using GarbageQueue = std::vector<GarbageAndSerial>;
 
 class MemoryProperties final : angle::NonCopyable
@@ -306,9 +308,10 @@ class StagingBuffer final : angle::NonCopyable
   public:
     StagingBuffer();
     void release(ContextVk *contextVk);
+    void collectGarbage(RendererVk *renderer, Serial serial);
     void destroy(VkDevice device);
 
-    angle::Result init(ContextVk *context, VkDeviceSize size, StagingUsage usage);
+    angle::Result init(Context *context, VkDeviceSize size, StagingUsage usage);
 
     Buffer &getBuffer() { return mBuffer; }
     const Buffer &getBuffer() const { return mBuffer; }
@@ -322,18 +325,26 @@ class StagingBuffer final : angle::NonCopyable
     size_t mSize;
 };
 
+angle::Result InitMappableDeviceMemory(vk::Context *context,
+                                       vk::DeviceMemory *deviceMemory,
+                                       VkDeviceSize size,
+                                       int value);
+
 angle::Result AllocateBufferMemory(Context *context,
                                    VkMemoryPropertyFlags requestedMemoryPropertyFlags,
                                    VkMemoryPropertyFlags *memoryPropertyFlagsOut,
                                    const void *extraAllocationInfo,
                                    Buffer *buffer,
-                                   DeviceMemory *deviceMemoryOut);
+                                   DeviceMemory *deviceMemoryOut,
+                                   VkDeviceSize *sizeOut);
 
 angle::Result AllocateImageMemory(Context *context,
                                   VkMemoryPropertyFlags memoryPropertyFlags,
                                   const void *extraAllocationInfo,
                                   Image *image,
-                                  DeviceMemory *deviceMemoryOut);
+                                  DeviceMemory *deviceMemoryOut,
+                                  VkDeviceSize *sizeOut);
+
 angle::Result AllocateImageMemoryWithRequirements(Context *context,
                                                   VkMemoryPropertyFlags memoryPropertyFlags,
                                                   const VkMemoryRequirements &memoryRequirements,
@@ -606,6 +617,14 @@ class Recycler final : angle::NonCopyable
     std::vector<T> mObjectFreeList;
 };
 
+using SpecializationConstantBitSet =
+    angle::PackedEnumBitSet<sh::vk::SpecializationConstantId, uint32_t>;
+static_assert(sizeof(SpecializationConstantBitSet) == sizeof(uint32_t), "Unexpected size");
+
+template <typename T>
+using SpecializationConstantMap = angle::PackedEnumMap<sh::vk::SpecializationConstantId, T>;
+
+void MakeDebugUtilsLabel(GLenum source, const char *marker, VkDebugUtilsLabelEXT *label);
 }  // namespace vk
 
 namespace gl_vk
@@ -620,12 +639,6 @@ VkFrontFace GetFrontFace(GLenum frontFace, bool invertCullFace);
 VkSampleCountFlagBits GetSamples(GLint sampleCount);
 VkComponentSwizzle GetSwizzle(const GLenum swizzle);
 VkCompareOp GetCompareOp(const GLenum compareFunc);
-
-constexpr angle::PackedEnumMap<gl::DrawElementsType, VkIndexType> kIndexTypeMap = {
-    {gl::DrawElementsType::UnsignedByte, VK_INDEX_TYPE_UINT16},
-    {gl::DrawElementsType::UnsignedShort, VK_INDEX_TYPE_UINT16},
-    {gl::DrawElementsType::UnsignedInt, VK_INDEX_TYPE_UINT32},
-};
 
 constexpr gl::ShaderMap<VkShaderStageFlagBits> kShaderStageMap = {
     {gl::ShaderType::Vertex, VK_SHADER_STAGE_VERTEX_BIT},

@@ -43,7 +43,7 @@ class TOutputGLSLBase : public TIntermTraverser
     std::string getCommonLayoutQualifiers(TIntermTyped *variable);
     std::string getMemoryQualifiers(const TType &type);
     virtual void writeLayoutQualifier(TIntermTyped *variable);
-    virtual void writeFieldLayoutQualifier(const TField *field);
+    void writeFieldLayoutQualifier(const TField *field);
     void writeInvariantQualifier(const TType &type);
     void writePreciseQualifier(const TType &type);
     virtual void writeVariableType(const TType &type,
@@ -88,10 +88,12 @@ class TOutputGLSLBase : public TIntermTraverser
     }
 
     void declareStruct(const TStructure *structure);
-    virtual void writeQualifier(TQualifier qualifier, const TType &type, const TSymbol *symbol);
+    void writeQualifier(TQualifier qualifier, const TType &type, const TSymbol *symbol);
     bool structDeclared(const TStructure *structure) const;
 
     const char *mapQualifierToString(TQualifier qualifier);
+
+    sh::GLenum getShaderType() { return mShaderType; }
 
   private:
     void declareInterfaceBlockLayout(const TInterfaceBlock *interfaceBlock);

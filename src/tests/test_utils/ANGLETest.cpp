@@ -271,6 +271,18 @@ GLColor32F ReadColor32F(GLint x, GLint y)
     EXPECT_GL_NO_ERROR();
     return actual;
 }
+
+void LoadEntryPointsWithUtilLoader()
+{
+#if defined(ANGLE_USE_UTIL_LOADER)
+    PFNEGLGETPROCADDRESSPROC getProcAddress;
+    ANGLETestEnvironment::GetEGLLibrary()->getAs("eglGetProcAddress", &getProcAddress);
+    ASSERT_NE(nullptr, getProcAddress);
+
+    LoadEGL(getProcAddress);
+    LoadGLES(getProcAddress);
+#endif  // defined(ANGLE_USE_UTIL_LOADER)
+}
 }  // namespace angle
 
 using namespace angle;
@@ -371,6 +383,12 @@ ANGLETestBase::ANGLETestBase(const PlatformParameters &params)
     // Override the default platform methods with the ANGLE test methods pointer.
     PlatformParameters withMethods            = params;
     withMethods.eglParameters.platformMethods = &gDefaultPlatformMethods;
+
+    // We don't build vulkan debug layers on Mac (http://anglebug.com/4376)
+    if (IsOSX() && withMethods.getRenderer() == EGL_PLATFORM_ANGLE_TYPE_VULKAN_ANGLE)
+    {
+        withMethods.eglParameters.debugLayersEnabled = false;
+    }
 
     auto iter = gFixtures.find(withMethods);
     if (iter != gFixtures.end())
@@ -506,14 +524,7 @@ void ANGLETestBase::ANGLETestSetUp()
 
     if (mCurrentParams->noFixture)
     {
-#if defined(ANGLE_USE_UTIL_LOADER)
-        PFNEGLGETPROCADDRESSPROC getProcAddress;
-        ANGLETestEnvironment::GetEGLLibrary()->getAs("eglGetProcAddress", &getProcAddress);
-        ASSERT_NE(nullptr, getProcAddress);
-
-        LoadEGL(getProcAddress);
-        LoadGLES(getProcAddress);
-#endif  // defined(ANGLE_USE_UTIL_LOADER)
+        LoadEntryPointsWithUtilLoader();
         return;
     }
 
@@ -1220,86 +1231,6 @@ void ANGLETestBase::setWindowVisible(bool isVisible)
     mFixture->osWindow->setVisible(isVisible);
 }
 
-bool IsAdreno()
-{
-    std::string rendererString(reinterpret_cast<const char *>(glGetString(GL_RENDERER)));
-    return (rendererString.find("Adreno") != std::string::npos);
-}
-
-bool IsD3D11()
-{
-    std::string rendererString(reinterpret_cast<const char *>(glGetString(GL_RENDERER)));
-    return (rendererString.find("Direct3D11 vs_5_0") != std::string::npos);
-}
-
-bool IsD3D11_FL93()
-{
-    std::string rendererString(reinterpret_cast<const char *>(glGetString(GL_RENDERER)));
-    return (rendererString.find("Direct3D11 vs_4_0_") != std::string::npos);
-}
-
-bool IsD3D9()
-{
-    std::string rendererString(reinterpret_cast<const char *>(glGetString(GL_RENDERER)));
-    return (rendererString.find("Direct3D9") != std::string::npos);
-}
-
-bool IsD3DSM3()
-{
-    return IsD3D9() || IsD3D11_FL93();
-}
-
-bool IsDesktopOpenGL()
-{
-    return IsOpenGL() && !IsOpenGLES();
-}
-
-bool IsOpenGLES()
-{
-    std::string rendererString(reinterpret_cast<const char *>(glGetString(GL_RENDERER)));
-    return (rendererString.find("OpenGL ES") != std::string::npos);
-}
-
-bool IsOpenGL()
-{
-    std::string rendererString(reinterpret_cast<const char *>(glGetString(GL_RENDERER)));
-    return (rendererString.find("OpenGL") != std::string::npos);
-}
-
-bool IsNULL()
-{
-    std::string rendererString(reinterpret_cast<const char *>(glGetString(GL_RENDERER)));
-    return (rendererString.find("NULL") != std::string::npos);
-}
-
-bool IsVulkan()
-{
-    const char *renderer = reinterpret_cast<const char *>(glGetString(GL_RENDERER));
-    std::string rendererString(renderer);
-    return (rendererString.find("Vulkan") != std::string::npos);
-}
-
-bool IsMetal()
-{
-    const char *renderer = reinterpret_cast<const char *>(glGetString(GL_RENDERER));
-    std::string rendererString(renderer);
-    return (rendererString.find("Metal") != std::string::npos);
-}
-
-bool IsDebug()
-{
-#if !defined(NDEBUG)
-    return true;
-#else
-    return false;
-#endif
-}
-
-bool IsRelease()
-{
-    return !IsDebug();
-}
-
 ANGLETestBase::TestFixture::TestFixture()  = default;
 ANGLETestBase::TestFixture::~TestFixture() = default;
 
@@ -1405,41 +1336,4 @@ void ANGLEProcessTestArgs(int *argc, char *argv[])
             exit(1);
         }
     }
-}
-
-bool EnsureGLExtensionEnabled(const std::string &extName)
-{
-    if (IsGLExtensionEnabled("GL_ANGLE_request_extension") && IsGLExtensionRequestable(extName))
-    {
-        glRequestExtensionANGLE(extName.c_str());
-    }
-
-    return IsGLExtensionEnabled(extName);
-}
-
-bool IsEGLClientExtensionEnabled(const std::string &extName)
-{
-    return CheckExtensionExists(eglQueryString(EGL_NO_DISPLAY, EGL_EXTENSIONS), extName);
-}
-
-bool IsEGLDeviceExtensionEnabled(EGLDeviceEXT device, const std::string &extName)
-{
-    return CheckExtensionExists(eglQueryDeviceStringEXT(device, EGL_EXTENSIONS), extName);
-}
-
-bool IsEGLDisplayExtensionEnabled(EGLDisplay display, const std::string &extName)
-{
-    return CheckExtensionExists(eglQueryString(display, EGL_EXTENSIONS), extName);
-}
-
-bool IsGLExtensionEnabled(const std::string &extName)
-{
-    return CheckExtensionExists(reinterpret_cast<const char *>(glGetString(GL_EXTENSIONS)),
-                                extName);
-}
-
-bool IsGLExtensionRequestable(const std::string &extName)
-{
-    return CheckExtensionExists(
-        reinterpret_cast<const char *>(glGetString(GL_REQUESTABLE_EXTENSIONS_ANGLE)), extName);
 }

@@ -350,7 +350,7 @@ TIntermBlock *TCompiler::compileTreeImpl(const char *const shaderStrings[],
     ASSERT(GetGlobalPoolAllocator());
 
     // Reset the extension behavior for each compilation unit.
-    ResetExtensionBehavior(mExtensionBehavior);
+    ResetExtensionBehavior(mResources, mExtensionBehavior, compileOptions);
 
     // If gl_DrawID is not supported, remove it from the available extensions
     // Currently we only allow emulation of gl_DrawID
@@ -472,6 +472,8 @@ void TCompiler::setASTMetadata(const TParseContext &parseContext)
 
     mPragma = parseContext.pragma();
     mSymbolTable.setGlobalInvariant(mPragma.stdgl.invariantAll);
+
+    mEarlyFragmentTestsSpecified = parseContext.isEarlyFragmentTestsSpecified();
 
     mComputeShaderLocalSizeDeclared = parseContext.isComputeShaderLocalSizeDeclared();
     mComputeShaderLocalSize         = parseContext.getComputeShaderLocalSize();
@@ -1113,6 +1115,26 @@ void TCompiler::collectInterfaceBlocks()
     mInterfaceBlocks.insert(mInterfaceBlocks.end(), mInBlocks.begin(), mInBlocks.end());
 }
 
+bool TCompiler::emulatePrecisionIfNeeded(TIntermBlock *root,
+                                         TInfoSinkBase &sink,
+                                         bool *isNeeded,
+                                         const ShShaderOutput outputLanguage)
+{
+    *isNeeded = getResources().WEBGL_debug_shader_precision && getPragma().debugShaderPrecision;
+
+    if (*isNeeded)
+    {
+        EmulatePrecision emulatePrecision(&getSymbolTable());
+        root->traverse(&emulatePrecision);
+        if (!emulatePrecision.updateTree(this, root))
+        {
+            return false;
+        }
+        emulatePrecision.writeEmulationHelpers(sink, getShaderVersion(), outputLanguage);
+    }
+    return true;
+}
+
 void TCompiler::clearResults()
 {
     mArrayBoundsClamper.Cleanup();
@@ -1454,6 +1476,14 @@ bool TCompiler::isVaryingDefined(const char *varyingName)
     return false;
 }
 
+void EmitEarlyFragmentTestsGLSL(const TCompiler &compiler, TInfoSinkBase &sink)
+{
+    if (compiler.isEarlyFragmentTestsSpecified())
+    {
+        sink << "layout (early_fragment_tests) in;\n";
+    }
+}
+
 void EmitWorkGroupSizeGLSL(const TCompiler &compiler, TInfoSinkBase &sink)
 {
     if (compiler.isComputeShaderLocalSizeDeclared())
@@ -1466,6 +1496,7 @@ void EmitWorkGroupSizeGLSL(const TCompiler &compiler, TInfoSinkBase &sink)
 
 void EmitMultiviewGLSL(const TCompiler &compiler,
                        const ShCompileOptions &compileOptions,
+                       const TExtension extension,
                        const TBehavior behavior,
                        TInfoSinkBase &sink)
 {
@@ -1490,7 +1521,12 @@ void EmitMultiviewGLSL(const TCompiler &compiler,
     }
     else
     {
-        sink << "#extension GL_OVR_multiview2 : " << GetBehaviorString(behavior) << "\n";
+        sink << "#extension GL_OVR_multiview";
+        if (extension == TExtension::OVR_multiview2)
+        {
+            sink << "2";
+        }
+        sink << " : " << GetBehaviorString(behavior) << "\n";
 
         const auto &numViews = compiler.getNumViews();
         if (isVertexShader && numViews != -1)

@@ -616,6 +616,61 @@ void main()
     verifyAttachment2DColor(3, textures[3], GL_TEXTURE_2D, 0, GLColor::white);
 }
 
+// Test that inactive fragment shader outputs don't cause a crash.
+TEST_P(GLSLTest_ES3, InactiveFragmentShaderOutput)
+{
+    constexpr char kFS[] = R"(#version 300 es
+precision highp float;
+
+// Make color0 inactive but specify color1 first.  The Vulkan backend assigns bogus locations when
+// compiling and fixes it up in SPIR-V.  If color0's location is not fixed, it will return location
+// 1 (aliasing color1).  This will lead to a Vulkan validation warning about attachment 0 not being
+// written to, which shouldn't be fatal.
+layout(location = 1) out vec4 color1;
+layout(location = 0) out vec4 color0;
+
+void main()
+{
+    color1 = vec4(0.0, 1.0, 0.0, 1.0);
+}
+)";
+
+    ANGLE_GL_PROGRAM(program, essl3_shaders::vs::Simple(), kFS);
+
+    constexpr GLint kDrawBufferCount = 2;
+
+    GLint maxDrawBuffers;
+    glGetIntegerv(GL_MAX_DRAW_BUFFERS, &maxDrawBuffers);
+    ASSERT_GE(maxDrawBuffers, kDrawBufferCount);
+
+    GLTexture textures[kDrawBufferCount];
+
+    for (GLint texIndex = 0; texIndex < kDrawBufferCount; ++texIndex)
+    {
+        glBindTexture(GL_TEXTURE_2D, textures[texIndex]);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, getWindowWidth(), getWindowHeight(), 0, GL_RGBA,
+                     GL_UNSIGNED_BYTE, nullptr);
+    }
+
+    GLenum allBufs[kDrawBufferCount] = {GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1};
+
+    GLFramebuffer fbo;
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, fbo);
+
+    // Enable all draw buffers.
+    for (GLint texIndex = 0; texIndex < kDrawBufferCount; ++texIndex)
+    {
+        glBindTexture(GL_TEXTURE_2D, textures[texIndex]);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + texIndex, GL_TEXTURE_2D,
+                               textures[texIndex], 0);
+    }
+    glDrawBuffers(kDrawBufferCount, allBufs);
+
+    // Draw with simple program.
+    drawQuad(program, essl3_shaders::PositionAttrib(), 0.5f, 1.0f, true);
+    ASSERT_GL_NO_ERROR();
+}
+
 TEST_P(GLSLTest, ScopedStructsOrderBug)
 {
     // TODO(geofflang): Find out why this doesn't compile on Apple OpenGL drivers
@@ -1550,6 +1605,103 @@ TEST_P(GLSLTest, MaxVaryingVec2Arrays)
     VaryingTestBase(0, 0, 0, maxVec2Arrays, 0, 0, 0, 0, false, false, false, true);
 }
 
+// Verify max varying with feedback and gl_line enabled
+TEST_P(GLSLTest_ES3, MaxVaryingWithFeedbackAndGLline)
+{
+    // (http://anglebug.com/4439)
+    ANGLE_SKIP_TEST_IF(IsAMD() && IsWindows() && IsVulkan());
+
+    // http://anglebug.com/4446
+    ANGLE_SKIP_TEST_IF(IsOSX() && IsOpenGL());
+
+    GLint maxVaryings = 0;
+    glGetIntegerv(GL_MAX_VARYING_VECTORS, &maxVaryings);
+
+    std::stringstream vertexShaderSource;
+    std::stringstream fragmentShaderSource;
+
+    // substract 1 here for gl_PointSize
+    const GLint vec4Count     = maxVaryings - 1;
+    unsigned int varyingCount = 0;
+    std::string varyingDeclaration;
+    for (GLint i = 0; i < vec4Count; i++)
+    {
+        varyingDeclaration += GenerateVectorVaryingDeclaration(4, 1, varyingCount);
+        varyingCount += 1;
+    }
+    // Generate the vertex shader
+    vertexShaderSource.clear();
+    vertexShaderSource << varyingDeclaration;
+    vertexShaderSource << "\nattribute vec4 a_position;\n";
+    vertexShaderSource << "\nvoid main()\n{\n";
+    unsigned int currentVSVarying = 0;
+    for (GLint i = 0; i < vec4Count; i++)
+    {
+        vertexShaderSource << GenerateVectorVaryingSettingCode(4, 1, currentVSVarying);
+        currentVSVarying += 1;
+    }
+    vertexShaderSource << "\tgl_Position = vec4(a_position.rgb, 1);\n";
+    vertexShaderSource << "\tgl_PointSize = 1.0;\n";
+    vertexShaderSource << "}\n";
+
+    // Generate the fragment shader
+    fragmentShaderSource.clear();
+    fragmentShaderSource << "precision highp float;\n";
+    fragmentShaderSource << varyingDeclaration;
+    fragmentShaderSource << "\nvoid main() \n{ \n\tvec4 retColor = vec4(0,0,0,0);\n";
+    unsigned int currentFSVarying = 0;
+    // Make use of the vec4 varyings
+    fragmentShaderSource << "\tretColor += ";
+    for (GLint i = 0; i < vec4Count; i++)
+    {
+        fragmentShaderSource << GenerateVectorVaryingUseCode(1, currentFSVarying);
+        currentFSVarying += 1;
+    }
+    fragmentShaderSource << "vec4(0.0, 0.0, 0.0, 0.0);\n";
+    constexpr GLuint testValue = 234;
+    fragmentShaderSource << "\tgl_FragColor = (retColor/vec4(" << std::to_string(currentFSVarying)
+                         << ")) /255.0*" << std::to_string(testValue) << ".0;\n";
+    fragmentShaderSource << "}\n";
+
+    std::vector<std::string> tfVaryings = {"gl_Position", "gl_PointSize"};
+    ANGLE_GL_PROGRAM_TRANSFORM_FEEDBACK(program1, vertexShaderSource.str().c_str(),
+                                        fragmentShaderSource.str().c_str(), tfVaryings,
+                                        GL_INTERLEAVED_ATTRIBS);
+
+    GLBuffer xfbBuffer;
+    glBindBuffer(GL_TRANSFORM_FEEDBACK_BUFFER, xfbBuffer);
+    glBufferData(GL_TRANSFORM_FEEDBACK_BUFFER, 6 * (sizeof(float[4]) + sizeof(float)), nullptr,
+                 GL_STATIC_DRAW);
+
+    GLTransformFeedback xfb;
+    glBindTransformFeedback(GL_TRANSFORM_FEEDBACK, xfb);
+    glBindBufferBase(GL_TRANSFORM_FEEDBACK_BUFFER, 0, xfbBuffer);
+
+    glUseProgram(program1);
+
+    const GLint positionLocation = glGetAttribLocation(program1, essl1_shaders::PositionAttrib());
+    GLBuffer vertexBuffer;
+    // need to shift half pixel to make sure the line covers the center of the pixel
+    const Vector3 vertices[2] = {
+        {-1.0f, -1.0f + 0.5f / static_cast<float>(getWindowHeight()), 0.0f},
+        {1.0f, -1.0f + 0.5f / static_cast<float>(getWindowHeight()), 0.0f}};
+    glBindBuffer(GL_ARRAY_BUFFER, vertexBuffer);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(*vertices) * 2, vertices, GL_STATIC_DRAW);
+    glVertexAttribPointer(positionLocation, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
+    glEnableVertexAttribArray(positionLocation);
+
+    glClearColor(0.0f, 0.0f, 1.0f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    glBeginTransformFeedback(GL_LINES);
+    glDrawArrays(GL_LINES, 0, 2);
+    glEndTransformFeedback();
+
+    ASSERT_GL_NO_ERROR();
+
+    EXPECT_PIXEL_COLOR_EQ(0, 0, GLColor(testValue, testValue, testValue, testValue));
+}
+
 // Verify shader source with a fixed length that is less than the null-terminated length will
 // compile.
 TEST_P(GLSLTest, FixedShaderLength)
@@ -2191,20 +2343,21 @@ TEST_P(GLSLTest_ES3, AmbiguousFunctionCall2x2)
 TEST_P(GLSLTest_ES3, LargeNumberOfFloat4Parameters)
 {
     std::stringstream vertexShaderStream;
-    const unsigned int paramCount = 1024u;
+    // Note: SPIR-V doesn't allow more than 255 parameters to a function.
+    const unsigned int paramCount = IsVulkan() ? 255u : 1024u;
 
     vertexShaderStream << "#version 300 es\n"
                           "precision highp float;\n"
                           "in vec4 a_vec;\n"
                           "vec4 lotsOfVec4Parameters(";
-    for (unsigned int i = 0; i < paramCount; ++i)
+    for (unsigned int i = 0; i < paramCount - 1; ++i)
     {
         vertexShaderStream << "vec4 a" << i << ", ";
     }
     vertexShaderStream << "vec4 aLast)\n"
                           "{\n"
                           "    vec4 sum = vec4(0.0, 0.0, 0.0, 0.0);\n";
-    for (unsigned int i = 0; i < paramCount; ++i)
+    for (unsigned int i = 0; i < paramCount - 1; ++i)
     {
         vertexShaderStream << "    sum += a" << i << ";\n";
     }
@@ -2214,7 +2367,7 @@ TEST_P(GLSLTest_ES3, LargeNumberOfFloat4Parameters)
                           "void main()\n"
                           "{\n"
                           "    gl_Position = lotsOfVec4Parameters(";
-    for (unsigned int i = 0; i < paramCount; ++i)
+    for (unsigned int i = 0; i < paramCount - 1; ++i)
     {
         vertexShaderStream << "a_vec, ";
     }
@@ -3038,6 +3191,32 @@ void main()
     EXPECT_EQ(GL_INVALID_INDEX, index);
 }
 
+// Test that inactive samplers in structs don't cause any errors.
+TEST_P(GLSLTest_ES31, InactiveSamplersInStructCS)
+{
+    // While the sampler is being extracted and declared outside of the struct, it's not removed
+    // from the struct definition.  http://anglebug.com/4211
+    ANGLE_SKIP_TEST_IF(IsVulkan() || IsMetal());
+
+    constexpr char kCS[] = R"(#version 310 es
+layout(local_size_x=1, local_size_y=1, local_size_z=1) in;
+struct S
+{
+    vec4 v;
+    sampler2D t[10];
+};
+uniform S s;
+void main()
+{
+})";
+
+    ANGLE_GL_COMPUTE_PROGRAM(program, kCS);
+
+    glUseProgram(program.get());
+    glDispatchCompute(1, 1, 1);
+    EXPECT_GL_NO_ERROR();
+}
+
 // Test that array indices for arrays of arrays of basic types work as expected.
 TEST_P(GLSLTest_ES31, ArraysOfArraysBasicType)
 {
@@ -3198,10 +3377,6 @@ TEST_P(GLSLTest_ES31, ArraysOfArraysSampler)
 // Test that structs containing arrays of samplers work as expected.
 TEST_P(GLSLTest_ES31, StructArraySampler)
 {
-    // ASAN error on vulkan backend; ASAN tests only enabled on Mac Swangle
-    // (http://crbug.com/1029378)
-    ANGLE_SKIP_TEST_IF(IsOSX() && isSwiftshader());
-
     constexpr char kFS[] =
         "#version 310 es\n"
         "precision mediump float;\n"
@@ -3217,13 +3392,14 @@ TEST_P(GLSLTest_ES31, StructArraySampler)
     glUseProgram(program.get());
     GLTexture textures[2];
     GLColor expected = MakeGLColor(32, 64, 96, 255);
+    GLubyte data[6]  = {};  // Two bytes of padding, so that texture can be initialized with 4 bytes
+    memcpy(data, expected.data(), sizeof(expected));
     for (int i = 0; i < 2; i++)
     {
         glActiveTexture(GL_TEXTURE0 + i);
         glBindTexture(GL_TEXTURE_2D, textures[i]);
         // Each element provides two components.
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE,
-                     expected.data() + 2 * i);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, data + 2 * i);
         std::stringstream uniformName;
         uniformName << "test.data[" << i << "]";
         // Then send it as a uniform
@@ -4631,6 +4807,36 @@ TEST_P(GLSLTest_ES3, ComplexVaryingStructsUsedInFragmentShader)
     EXPECT_PIXEL_COLOR_EQ(0, 0, GLColor::green);
 }
 
+// Test that an inactive varying array that doesn't get used in the fragment shader works.
+TEST_P(GLSLTest_ES3, InactiveVaryingArrayUnusedInFragmentShader)
+{
+    constexpr char kVS[] =
+        "#version 300 es\n"
+        "in vec4 inputAttribute;\n"
+        "out vec4 varArray[4];\n"
+        "void main()\n"
+        "{\n"
+        "    gl_Position = inputAttribute;\n"
+        "    varArray[0] = vec4(1.0, 0.0, 0.0, 1.0);\n"
+        "    varArray[1] = vec4(0.0, 1.0, 0.0, 1.0);\n"
+        "    varArray[2] = vec4(0.0, 0.0, 1.0, 1.0);\n"
+        "    varArray[3] = vec4(1.0, 1.0, 0.0, 1.0);\n"
+        "}\n";
+
+    constexpr char kFS[] =
+        "#version 300 es\n"
+        "precision mediump float;\n"
+        "out vec4 col;\n"
+        "void main()\n"
+        "{\n"
+        "    col = vec4(0.0, 0.0, 0.0, 1.0);\n"
+        "}\n";
+
+    ANGLE_GL_PROGRAM(program, kVS, kFS);
+    drawQuad(program.get(), "inputAttribute", 0.5f);
+    EXPECT_PIXEL_COLOR_EQ(0, 0, GLColor::black);
+}
+
 // Test that an inactive varying struct that doesn't get used in the fragment shader works.
 TEST_P(GLSLTest_ES3, InactiveVaryingStructUnusedInFragmentShader)
 {
@@ -5252,6 +5458,83 @@ void main()
     a = u_zero + 1;
     int b = multiplyA(multiplyA(2).length()).length();
     if (b == 3 && a == 6)
+    {
+        my_FragColor = vec4(0, 1, 0, 1);
+    }
+    else
+    {
+        my_FragColor = vec4(1, 0, 0, 1);
+    }
+})";
+
+    ANGLE_GL_PROGRAM(program, essl3_shaders::vs::Simple(), kFS);
+    drawQuad(program.get(), essl3_shaders::PositionAttrib(), 0.5f);
+    EXPECT_PIXEL_COLOR_EQ(0, 0, GLColor::green);
+}
+
+// Test calling array length() with a "this" expression having side effects inside an if condition.
+// This is an issue if the the side effect can be short circuited.
+TEST_P(GLSLTest_ES3, ArrayLengthOnShortCircuitedExpressionWithSideEffectsInIfCondition)
+{
+    // Bug in the shader translator.  http://anglebug.com/3829
+    ANGLE_SKIP_TEST_IF(true);
+
+    // "a" shouldn't get modified by this shader.
+    constexpr char kFS[] = R"(#version 300 es
+precision highp float;
+out vec4 my_FragColor;
+uniform int u_zero;
+int a;
+int[2] doubleA()
+{
+    a *= 2;
+    return int[2](a, a);
+}
+void main()
+{
+    a = u_zero + 1;
+    if (u_zero != 0 && doubleA().length() == 2)
+    {
+        ++a;
+    }
+    if (a == 1)
+    {
+        my_FragColor = vec4(0, 1, 0, 1);
+    }
+    else
+    {
+        my_FragColor = vec4(1, 0, 0, 1);
+    }
+})";
+
+    ANGLE_GL_PROGRAM(program, essl3_shaders::vs::Simple(), kFS);
+    drawQuad(program.get(), essl3_shaders::PositionAttrib(), 0.5f);
+    EXPECT_PIXEL_COLOR_EQ(0, 0, GLColor::green);
+}
+
+// Test calling array length() with a "this" expression having side effects in a statement where the
+// side effect can be short circuited.
+TEST_P(GLSLTest_ES3, ArrayLengthOnShortCircuitedExpressionWithSideEffectsInStatement)
+{
+    // Bug in the shader translator.  http://anglebug.com/3829
+    ANGLE_SKIP_TEST_IF(true);
+
+    // "a" shouldn't get modified by this shader.
+    constexpr char kFS[] = R"(#version 300 es
+precision highp float;
+out vec4 my_FragColor;
+uniform int u_zero;
+int a;
+int[2] doubleA()
+{
+    a *= 2;
+    return int[2](a, a);
+}
+void main()
+{
+    a = u_zero + 1;
+    bool test = u_zero != 0 && doubleA().length() == 2;
+    if (a == 1)
     {
         my_FragColor = vec4(0, 1, 0, 1);
     }
@@ -5975,6 +6258,31 @@ void main()
     ANGLE_GL_PROGRAM(program, kVS, kFS);
 }
 
+// Test that linking varyings by location works.
+TEST_P(GLSLTest_ES31, LinkVaryingsByLocation)
+{
+    constexpr char kVS[] = R"(#version 310 es
+precision highp float;
+in vec4 position;
+layout(location = 1) out vec4 shaderOutput;
+void main() {
+    gl_Position = position;
+    shaderOutput = vec4(0.0, 1.0, 0.0, 1.0);
+})";
+
+    constexpr char kFS[] = R"(#version 310 es
+precision highp float;
+layout(location = 1) in vec4 shaderInput;
+out vec4 outColor;
+void main() {
+    outColor = shaderInput;
+})";
+
+    ANGLE_GL_PROGRAM(program, kVS, kFS);
+    drawQuad(program, "position", 0.5f);
+    EXPECT_PIXEL_COLOR_EQ(0, 0, GLColor::green);
+}
+
 // Test nesting floor() calls with a large multiplier inside.
 TEST_P(GLSLTest_ES3, NestedFloorWithLargeMultiplierInside)
 {
@@ -6644,12 +6952,49 @@ TEST_P(GLSLTest, MemoryExhaustedTest)
     EXPECT_NE(0u, program);
 }
 
+// Test that inactive samplers in structs don't cause any errors.
+TEST_P(GLSLTest, InactiveSamplersInStruct)
+{
+    // While the sampler is being extracted and declared outside of the struct, it's not removed
+    // from the struct definition.  http://anglebug.com/4211
+    ANGLE_SKIP_TEST_IF(IsVulkan() || IsMetal());
+
+    constexpr char kVS[] = R"(attribute vec4 a_position;
+void main() {
+  gl_Position = a_position;
+})";
+
+    constexpr char kFS[] = R"(precision highp float;
+struct S
+{
+    vec4 v;
+    sampler2D t[10];
+};
+uniform S s;
+void main() {
+  gl_FragColor = s.v;
+})";
+
+    ANGLE_GL_PROGRAM(program, kVS, kFS);
+
+    drawQuad(program, "a_position", 0.5f);
+}
+
 // Helper functions for MixedRowAndColumnMajorMatrices* tests
 
 // Round up to alignment, assuming it's a power of 2
 uint32_t RoundUpPow2(uint32_t value, uint32_t alignment)
 {
     return (value + alignment - 1) & ~(alignment - 1);
+}
+
+void CreateOutputBuffer(GLBuffer *buffer, uint32_t binding)
+{
+    unsigned int outputInitData = 0;
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, *buffer);
+    glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(outputInitData), &outputInitData, GL_STATIC_DRAW);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, binding, *buffer);
+    EXPECT_GL_NO_ERROR();
 }
 
 // Fill provided buffer with matrices based on the given dimensions.  The buffer should be large
@@ -6670,7 +7015,10 @@ uint32_t FillBuffer(const std::pair<uint32_t, uint32_t> matrixDims[],
 
         uint32_t arraySize              = isColMajor ? cols : rows;
         uint32_t arrayElementComponents = isColMajor ? rows : cols;
-        uint32_t stride                 = isStd430 ? RoundUpPow2(arrayElementComponents, 2) : 4;
+        // Note: stride is generally 4 with std140, except for scalar and gvec2 types (which
+        // MixedRowAndColumnMajorMatrices* tests don't use).  With std430, small matrices can have
+        // a stride of 2 between rows/columns.
+        uint32_t stride = isStd430 ? RoundUpPow2(arrayElementComponents, 2) : 4;
 
         offset = RoundUpPow2(offset, stride);
 
@@ -6725,6 +7073,13 @@ bool VerifyBuffer(GLuint buffer, const float data[], uint32_t dataSize)
     return isCorrect;
 }
 
+// Verify that the success output of the shader is as expected.
+bool VerifySuccess(GLuint buffer)
+{
+    uint32_t success = 1;
+    return VerifyBuffer(buffer, reinterpret_cast<const float *>(&success), 1);
+}
+
 // Test reading from UBOs and SSBOs and writing to SSBOs with mixed row- and colum-major layouts in
 // both std140 and std430 layouts.  Tests many combinations of std140 vs std430, struct being used
 // as row- or column-major in different UBOs, reading from UBOs and SSBOs and writing to SSBOs,
@@ -6733,6 +7088,12 @@ bool VerifyBuffer(GLuint buffer, const float data[], uint32_t dataSize)
 // Some very specific corner cases that are not covered here are tested in the subsequent tests.
 TEST_P(GLSLTest_ES31, MixedRowAndColumnMajorMatrices)
 {
+    GLint maxComputeShaderStorageBlocks;
+    glGetIntegerv(GL_MAX_COMPUTE_SHADER_STORAGE_BLOCKS, &maxComputeShaderStorageBlocks);
+
+    // The test uses 9 SSBOs.  Skip if not that many are supported.
+    ANGLE_SKIP_TEST_IF(maxComputeShaderStorageBlocks < 9);
+
     // Fails on Nvidia because having |Matrices| qualified as row-major in one UBO makes the other
     // UBO also see it as row-major despite explicit column-major qualifier.
     // http://anglebug.com/3830
@@ -6757,9 +7118,9 @@ TEST_P(GLSLTest_ES31, MixedRowAndColumnMajorMatrices)
     // Fails input verification as well as std140 SSBO validation.  http://anglebug.com/3844
     ANGLE_SKIP_TEST_IF(IsWindows() && IsAMD() && IsVulkan());
 
-    constexpr char kFS[] = R"(#version 310 es
+    constexpr char kCS[] = R"(#version 310 es
 precision highp float;
-out vec4 outColor;
+layout(local_size_x=1) in;
 
 struct Inner
 {
@@ -6839,6 +7200,11 @@ layout(std430, row_major, binding = 7) buffer Ssbo430rOut
     mat4 m4c4r;
     layout(column_major) Matrices m;
 } ssbo430rOut;
+
+layout(std140, binding = 8) buffer Result
+{
+    uint success;
+} resultOut;
 
 #define EXPECT(result, expression, value) if ((expression) != value) { result = false; }
 #define EXPECTV(result, expression, value) if (any(notEqual(expression, value))) { result = false; }
@@ -6925,9 +7291,8 @@ void main()
     VERIFY_IN(result, ssbo430rIn.m.inner.m3c4r, 3, 4);
     EXPECT(result, verifyMatrices(ssbo430rIn.m), true);
 
-    // Only assign to SSBO from a single pixel.
-    bool isOriginPixel = all(lessThan(gl_FragCoord.xy, vec2(1.0, 1.0)));
-    if (isOriginPixel)
+    // Only assign to SSBO from a single invocation.
+    if (gl_GlobalInvocationID.x == 0u)
     {
         ssbo140cOut.m4c4r = copyMat4(ssbo140cIn.m4c4r);
         copyMatrices(ssbo430cIn.m, ssbo140cOut.m);
@@ -6948,12 +7313,12 @@ void main()
         copyMatrices(ssbo140rIn.m, ssbo430rOut.m);
         ssbo430rOut.m.inner.m4c3r = mat4x3(0);
         COPY(ssbo430rIn.m.inner.m4c3r, ssbo430rOut.m.inner.m4c3r, 4, 3);
-    }
 
-    outColor = result ? vec4(0, 1, 0, 1) : vec4(1, 0, 0, 1);
+        resultOut.success = uint(result);
+    }
 })";
 
-    ANGLE_GL_PROGRAM(program, essl31_shaders::vs::Simple(), kFS);
+    ANGLE_GL_COMPUTE_PROGRAM(program, kCS);
     EXPECT_GL_NO_ERROR();
 
     constexpr size_t kMatrixCount                                     = 7;
@@ -7007,8 +7372,13 @@ void main()
                false);
     EXPECT_GL_NO_ERROR();
 
-    drawQuad(program, essl31_shaders::PositionAttrib(), 0.5f, 1.0f, true);
-    EXPECT_PIXEL_COLOR_EQ(0, 0, GLColor::green);
+    GLBuffer outputBuffer;
+    CreateOutputBuffer(&outputBuffer, 8);
+
+    glUseProgram(program);
+    glDispatchCompute(1, 1, 1);
+    EXPECT_GL_NO_ERROR();
+    EXPECT_TRUE(VerifySuccess(outputBuffer));
 
     EXPECT_TRUE(VerifyBuffer(ssboStd140ColMajorOut, dataStd140ColMajor, sizeStd140ColMajor));
     EXPECT_TRUE(VerifyBuffer(ssboStd140RowMajorOut, dataStd140RowMajor, sizeStd140RowMajor));
@@ -7104,9 +7474,6 @@ void main()
 // Test that side effects when transforming read operations are preserved.
 TEST_P(GLSLTest_ES3, MixedRowAndColumnMajorMatrices_ReadSideEffect)
 {
-    // http://anglebug.com/3831
-    ANGLE_SKIP_TEST_IF(IsNVIDIA() && IsOpenGL());
-
     // Fails on Mac on Intel and AMD: http://anglebug.com/3842
     ANGLE_SKIP_TEST_IF(IsOSX() && IsOpenGL() && (IsIntel() || IsAMD()));
 
@@ -7119,13 +7486,13 @@ out vec4 outColor;
 
 struct S
 {
-    mat2x3 m2[2];
+    mat2x3 m2[3];
 };
 
 layout(std140, column_major) uniform Ubo
 {
     mat4 m1;
-    layout(row_major) S s[3];
+    layout(row_major) S s[2];
 } ubo;
 
 #define EXPECT(result, expression, value) if ((expression) != value) { result = false; }
@@ -7203,15 +7570,12 @@ void main()
 // Test that side effects respect the order of logical expression operands.
 TEST_P(GLSLTest_ES3, MixedRowAndColumnMajorMatrices_ReadSideEffectOrder)
 {
-    // IntermTraverser::insertStatementsInParentBlock that's used to move side effects does not
-    // respect the order of evaluation of logical expressions.  http://anglebug.com/3829.
-    ANGLE_SKIP_TEST_IF(IsVulkan());
-
     // http://anglebug.com/3837
     ANGLE_SKIP_TEST_IF(IsLinux() && IsIntel() && IsOpenGL());
 
-    // Fails on Mac on Intel and AMD: http://anglebug.com/3842
-    ANGLE_SKIP_TEST_IF(IsOSX() && IsOpenGL() && (IsIntel() || IsAMD()));
+    // IntermTraverser::insertStatementsInParentBlock that's used to move side effects does not
+    // respect the order of evaluation of logical expressions.  http://anglebug.com/3829.
+    ANGLE_SKIP_TEST_IF(IsOSX() && IsOpenGL());
 
     constexpr char kFS[] = R"(#version 300 es
 precision highp float;
@@ -7268,18 +7632,12 @@ void main()
 // Test that side effects respect short-circuit.
 TEST_P(GLSLTest_ES3, MixedRowAndColumnMajorMatrices_ReadSideEffectShortCircuit)
 {
-    // IntermTraverser::insertStatementsInParentBlock that's used to move side effects does not
-    // respect short-circuiting in evaluation of logical expressions.  http://anglebug.com/3829.
-    ANGLE_SKIP_TEST_IF(IsVulkan());
-
     // Fails on Android: http://anglebug.com/3839
     ANGLE_SKIP_TEST_IF(IsAndroid() && IsOpenGL());
 
-    // Fails on Mac on Intel and AMD: http://anglebug.com/3842
-    ANGLE_SKIP_TEST_IF(IsOSX() && IsOpenGL() && (IsIntel() || IsAMD()));
-
-    // Fails on Mac on Nvidia: http://anglebug.com/3843
-    ANGLE_SKIP_TEST_IF(IsOSX() && IsOpenGL() && IsNVIDIA());
+    // IntermTraverser::insertStatementsInParentBlock that's used to move side effects does not
+    // respect the order of evaluation of logical expressions.  http://anglebug.com/3829.
+    ANGLE_SKIP_TEST_IF(IsOSX() && IsOpenGL());
 
     constexpr char kFS[] = R"(#version 300 es
 precision highp float;
@@ -7452,7 +7810,7 @@ void main(void)
         glMapBufferRange(GL_SHADER_STORAGE_BUFFER, 0, sizeof(outputInitData), GL_MAP_READ_BIT));
     EXPECT_EQ(ptr[0], inputData);
     EXPECT_EQ(ptr[1], uniformData);
-    EXPECT_EQ(ptr[2], textureData.R);
+    EXPECT_NEAR(ptr[2], textureData.R, 1.0);
     EXPECT_EQ(ptr[3], acData);
     EXPECT_EQ(ptr[4], imageData);
 
@@ -7471,9 +7829,9 @@ TEST_P(GLSLTest_ES31, MixedRowAndColumnMajorMatrices_WriteSideEffect)
     // Fails on D3D due to mistranslation: http://anglebug.com/3841
     ANGLE_SKIP_TEST_IF(IsD3D11());
 
-    constexpr char kFS[] = R"(#version 310 es
+    constexpr char kCS[] = R"(#version 310 es
 precision highp float;
-out vec4 outColor;
+layout(local_size_x=1) in;
 
 layout(std140, column_major) uniform Ubo
 {
@@ -7487,24 +7845,28 @@ layout(std140, row_major, binding = 0) buffer Ssbo
     mat4 m2;
 } ssbo;
 
+layout(std140, binding = 1) buffer Result
+{
+    uint success;
+} resultOut;
+
 void main()
 {
     bool result = true;
 
-    // Only assign to SSBO from a single pixel.
-    bool isOriginPixel = all(lessThan(gl_FragCoord.xy, vec2(1.0, 1.0)));
-    if (isOriginPixel)
+    // Only assign to SSBO from a single invocation.
+    if (gl_GlobalInvocationID.x == 0u)
     {
         if ((ssbo.m2 = ssbo.m1 = ubo.m1) != ubo.m2)
         {
             result = false;
         }
-    }
 
-    outColor = result ? vec4(0, 1, 0, 1) : vec4(1, 0, 0, 1);
+        resultOut.success = uint(result);
+    }
 })";
 
-    ANGLE_GL_PROGRAM(program, essl31_shaders::vs::Simple(), kFS);
+    ANGLE_GL_COMPUTE_PROGRAM(program, kCS);
     EXPECT_GL_NO_ERROR();
 
     constexpr size_t kMatrixCount                                     = 2;
@@ -7529,8 +7891,13 @@ void main()
     InitBuffer(program, "Ssbo", ssbo, 0, zeros, size, false);
     EXPECT_GL_NO_ERROR();
 
-    drawQuad(program, essl31_shaders::PositionAttrib(), 0.5f, 1.0f, true);
-    EXPECT_PIXEL_COLOR_EQ(0, 0, GLColor::green);
+    GLBuffer outputBuffer;
+    CreateOutputBuffer(&outputBuffer, 1);
+
+    glUseProgram(program);
+    glDispatchCompute(1, 1, 1);
+    EXPECT_GL_NO_ERROR();
+    EXPECT_TRUE(VerifySuccess(outputBuffer));
 
     EXPECT_TRUE(VerifyBuffer(ssbo, data, size));
 }
@@ -7544,9 +7911,12 @@ TEST_P(GLSLTest_ES31, MixedRowAndColumnMajorMatrices_WriteArrayOfArray)
     // Fails on D3D due to mistranslation: http://anglebug.com/3841
     ANGLE_SKIP_TEST_IF(IsD3D11());
 
-    constexpr char kFS[] = R"(#version 310 es
+    // Fails compiling shader on Android/Vulkan.  http://anglebug.com/4290
+    ANGLE_SKIP_TEST_IF(IsAndroid() && IsVulkan());
+
+    constexpr char kCS[] = R"(#version 310 es
 precision highp float;
-out vec4 outColor;
+layout(local_size_x=1) in;
 
 layout(std140, column_major) uniform Ubo
 {
@@ -7560,22 +7930,26 @@ layout(std140, row_major, binding = 0) buffer Ssbo
     mat4 m2[2][3];
 } ssbo;
 
+layout(std140, binding = 1) buffer Result
+{
+    uint success;
+} resultOut;
+
 void main()
 {
     bool result = true;
 
-    // Only assign to SSBO from a single pixel.
-    bool isOriginPixel = all(lessThan(gl_FragCoord.xy, vec2(1.0, 1.0)));
-    if (isOriginPixel)
+    // Only assign to SSBO from a single invocation.
+    if (gl_GlobalInvocationID.x == 0u)
     {
         ssbo.m1 = ubo.m1;
         ssbo.m2 = ubo.m2;
-    }
 
-    outColor = result ? vec4(0, 1, 0, 1) : vec4(1, 0, 0, 1);
+        resultOut.success = uint(result);
+    }
 })";
 
-    ANGLE_GL_PROGRAM(program, essl31_shaders::vs::Simple(), kFS);
+    ANGLE_GL_COMPUTE_PROGRAM(program, kCS);
     EXPECT_GL_NO_ERROR();
 
     constexpr size_t kMatrixCount                                     = 7;
@@ -7598,8 +7972,13 @@ void main()
     InitBuffer(program, "Ssbo", ssbo, 0, zeros, size, false);
     EXPECT_GL_NO_ERROR();
 
-    drawQuad(program, essl31_shaders::PositionAttrib(), 0.5f, 1.0f, true);
-    EXPECT_PIXEL_COLOR_EQ(0, 0, GLColor::green);
+    GLBuffer outputBuffer;
+    CreateOutputBuffer(&outputBuffer, 1);
+
+    glUseProgram(program);
+    glDispatchCompute(1, 1, 1);
+    EXPECT_GL_NO_ERROR();
+    EXPECT_TRUE(VerifySuccess(outputBuffer));
 
     EXPECT_TRUE(VerifyBuffer(ssbo, data, size));
 }
@@ -7651,6 +8030,72 @@ void main() { v_varying = a_position.x; gl_Position = a_position; })";
     EXPECT_EQ(0u, program);
 }
 
+// Test that reusing the same variable name for different uses across stages links fine.  Glslang
+// wrapper's SPIR-V transformation should ignore all names for non-shader-interface variables and
+// not get confused by them.
+TEST_P(GLSLTest_ES31, VariableNameReuseAcrossStages)
+{
+    // Fails to compile the fragment shader with error "undeclared identifier '_g'"
+    // http://anglebug.com/4404
+    ANGLE_SKIP_TEST_IF(IsD3D11());
+
+    constexpr char kVS[] = R"(#version 310 es
+precision mediump float;
+uniform highp vec4 a;
+in highp vec4 b;
+in highp vec4 c;
+in highp vec4 d;
+out highp vec4 e;
+
+vec4 f(vec4 a)
+{
+    return a;
+}
+
+vec4 g(vec4 f)
+{
+    return f + f;
+}
+
+void main() {
+    e = f(b) + a;
+    gl_Position = g(c) + f(d);
+}
+)";
+
+    constexpr char kFS[] = R"(#version 310 es
+precision mediump float;
+in highp vec4 e;
+uniform sampler2D f;
+layout(rgba8) uniform highp readonly image2D g;
+uniform A
+{
+    vec4 x;
+} c;
+layout(std140, binding=0) buffer B
+{
+    vec4 x;
+} d[2];
+out vec4 col;
+
+vec4 h(vec4 c)
+{
+    return texture(f, c.xy) + imageLoad(g, ivec2(c.zw));
+}
+
+vec4 i(vec4 x, vec4 y)
+{
+    return vec4(x.xy, y.zw);
+}
+
+void main() {
+    col = h(e) + i(c.x, d[0].x) + d[1].x;
+}
+)";
+
+    GLuint program = CompileProgram(kVS, kFS);
+    EXPECT_NE(0u, program);
+}
 }  // anonymous namespace
 
 // Use this to select which configurations (e.g. which renderer, which GLES major version) these

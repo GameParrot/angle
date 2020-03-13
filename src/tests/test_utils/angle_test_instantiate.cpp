@@ -246,6 +246,11 @@ bool IsAMD()
     return HasSystemVendorID(kVendorID_AMD);
 }
 
+bool IsARM()
+{
+    return HasSystemVendorID(kVendorID_ARM);
+}
+
 bool IsNVIDIA()
 {
 #if defined(ANGLE_PLATFORM_ANDROID)
@@ -256,6 +261,15 @@ bool IsNVIDIA()
     }
 #endif
     return HasSystemVendorID(kVendorID_NVIDIA);
+}
+
+bool IsARM64()
+{
+#if defined(_M_ARM64)
+    return true;
+#else
+    return false;
+#endif
 }
 
 bool IsConfigWhitelisted(const SystemInfo &systemInfo, const PlatformParameters &param)
@@ -282,7 +296,13 @@ bool IsConfigWhitelisted(const SystemInfo &systemInfo, const PlatformParameters 
                     case EGL_PLATFORM_ANGLE_TYPE_D3D9_ANGLE:
                     case EGL_PLATFORM_ANGLE_TYPE_D3D11_ANGLE:
                     case EGL_PLATFORM_ANGLE_TYPE_OPENGL_ANGLE:
+                        return true;
                     case EGL_PLATFORM_ANGLE_TYPE_VULKAN_ANGLE:
+                        if (IsARM64())
+                        {
+                            return param.getDeviceType() ==
+                                   EGL_PLATFORM_ANGLE_DEVICE_TYPE_SWIFTSHADER_ANGLE;
+                        }
                         return true;
                     case EGL_PLATFORM_ANGLE_TYPE_OPENGLES_ANGLE:
                         // ES 3.1+ back-end is not supported properly.
@@ -348,6 +368,16 @@ bool IsConfigWhitelisted(const SystemInfo &systemInfo, const PlatformParameters 
             return false;
         }
 
+        // ES 3 configs do not work properly on Fuchsia ARM.
+        // TODO(anglebug.com/4352): Investigate missing features.
+        if (param.majorVersion > 2 && IsARM())
+            return false;
+
+        // Loading swiftshader is not brought up on Fuchsia.
+        // TODO(anglebug.com/4353): Support loading swiftshader vulkan ICD.
+        if (param.getDeviceType() == EGL_PLATFORM_ANGLE_DEVICE_TYPE_SWIFTSHADER_ANGLE)
+            return false;
+
         // Currently we only support the Vulkan back-end on Fuchsia.
         return (param.getRenderer() == EGL_PLATFORM_ANGLE_TYPE_VULKAN_ANGLE);
     }
@@ -403,6 +433,21 @@ bool IsConfigWhitelisted(const SystemInfo &systemInfo, const PlatformParameters 
             }
         }
 
+        // TODO: http://crbug.com/swiftshader/145
+        // Swiftshader does not currently have all the robustness features
+        // we need for ANGLE. In particular, it is unable to detect and recover
+        // from infinitely looping shaders. That bug is the tracker for fixing
+        // that and when resolved we can remove the following code.
+        // This test will disable tests marked with the config WithRobustness
+        // when run with the swiftshader Vulkan driver and on Android.
+        DeviceID deviceID =
+            systemInfo.gpus.empty() ? 0 : systemInfo.gpus[systemInfo.activeGPUIndex].deviceId;
+        if ((param.isSwiftshader() || (IsGoogle(vendorID) && deviceID == kDeviceID_Swiftshader)) &&
+            param.eglParameters.robustness)
+        {
+            return false;
+        }
+
         // Currently we support the GLES and Vulkan back-ends on Android.
         switch (param.getRenderer())
         {
@@ -451,6 +496,15 @@ bool IsConfigSupported(const PlatformParameters &param)
 
 bool IsPlatformAvailable(const PlatformParameters &param)
 {
+    // Disable "null" device when not on ANGLE or in D3D9.
+    if (param.getDeviceType() == EGL_PLATFORM_ANGLE_DEVICE_TYPE_NULL_ANGLE)
+    {
+        if (param.driver != GLESDriverType::AngleEGL)
+            return false;
+        if (param.getRenderer() == EGL_PLATFORM_ANGLE_TYPE_D3D9_ANGLE)
+            return false;
+    }
+
     switch (param.getRenderer())
     {
         case EGL_PLATFORM_ANGLE_TYPE_DEFAULT_ANGLE:

@@ -17,6 +17,7 @@
 #include "common/Optional.h"
 #include "common/utilities.h"
 #include "libANGLE/renderer/ProgramImpl.h"
+#include "libANGLE/renderer/glslang_wrapper_utils.h"
 #include "libANGLE/renderer/metal/mtl_command_buffer.h"
 #include "libANGLE/renderer/metal/mtl_resources.h"
 #include "libANGLE/renderer/metal/mtl_state_cache.h"
@@ -131,7 +132,9 @@ class ProgramMtl : public ProgramImpl
 
     void reset(ContextMtl *context);
     void linkResources(const gl::ProgramLinkedResources &resources);
-    angle::Result linkImpl(const gl::Context *glContext, gl::InfoLog &infoLog);
+    angle::Result linkImpl(const gl::Context *glContext,
+                           const gl::ProgramLinkedResources &resources,
+                           gl::InfoLog &infoLog);
     angle::Result convertToMsl(const gl::Context *glContext,
                                gl::ShaderType shaderType,
                                gl::InfoLog &infoLog,
@@ -159,9 +162,6 @@ class ProgramMtl : public ProgramImpl
     gl::ShaderBitSet mDefaultUniformBlocksDirty;
     gl::ShaderBitSet mSamplerBindingsDirty;
     gl::ShaderMap<DefaultUniformBlock> mDefaultUniformBlocks;
-
-    // We keep the translated linked shader sources to use with shader draw call patching.
-    gl::ShaderMap<std::string> mShaderSource;
 
     mtl::RenderPipelineCache mMetalRenderPipelineCache;
 };

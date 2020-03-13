@@ -24,7 +24,7 @@
 
 // We directly call into a function to register the parameterized tests. This saves spinning up
 // a subprocess with a new gtest filter.
-#include "third_party/googletest/src/googletest/src/gtest-internal-inl.h"
+#include <gtest/../../src/gtest-internal-inl.h>
 
 namespace js = rapidjson;
 
@@ -32,11 +32,20 @@ namespace angle
 {
 namespace
 {
-constexpr char kTestTimeoutArg[]  = "--test-timeout=";
-constexpr char kFilterFileArg[]   = "--filter-file=";
-constexpr char kResultFileArg[]   = "--results-file=";
-constexpr int kDefaultTestTimeout = 10;
-constexpr int kDefaultBatchSize   = 1000;
+constexpr char kTestTimeoutArg[] = "--test-timeout=";
+constexpr char kFilterFileArg[]  = "--filter-file=";
+constexpr char kResultFileArg[]  = "--results-file=";
+#if defined(NDEBUG)
+constexpr int kDefaultTestTimeout = 20;
+#else
+constexpr int kDefaultTestTimeout  = 60;
+#endif
+#if defined(NDEBUG)
+constexpr int kDefaultBatchTimeout = 240;
+#else
+constexpr int kDefaultBatchTimeout = 600;
+#endif
+constexpr int kDefaultBatchSize = 1000;
 
 const char *ParseFlagValue(const char *flag, const char *argument)
 {
@@ -311,10 +320,16 @@ class TestEventListener : public testing::EmptyTestEventListener
     TestResults *mTestResults;
 };
 
+bool IsTestDisabled(const testing::TestInfo &testInfo)
+{
+    return ::strstr(testInfo.name(), "DISABLED_") == testInfo.name();
+}
+
 using TestIdentifierFilter = std::function<bool(const TestIdentifier &id)>;
 
 std::vector<TestIdentifier> FilterTests(std::map<TestIdentifier, FileLine> *fileLinesOut,
-                                        TestIdentifierFilter filter)
+                                        TestIdentifierFilter filter,
+                                        bool alsoRunDisabledTests)
 {
     std::vector<TestIdentifier> tests;
 
@@ -326,7 +341,7 @@ std::vector<TestIdentifier> FilterTests(std::map<TestIdentifier, FileLine> *file
         {
             const testing::TestInfo &testInfo = *testSuite.GetTestInfo(testIndex);
             TestIdentifier id                 = GetTestIdentifier(testInfo);
-            if (filter(id))
+            if (filter(id) && (!IsTestDisabled(testInfo) || alsoRunDisabledTests))
             {
                 tests.emplace_back(id);
 
@@ -341,26 +356,22 @@ std::vector<TestIdentifier> FilterTests(std::map<TestIdentifier, FileLine> *file
     return tests;
 }
 
-std::vector<TestIdentifier> GetFilteredTests(std::map<TestIdentifier, FileLine> *fileLinesOut)
+std::vector<TestIdentifier> GetFilteredTests(std::map<TestIdentifier, FileLine> *fileLinesOut,
+                                             bool alsoRunDisabledTests)
 {
     TestIdentifierFilter gtestIDFilter = [](const TestIdentifier &id) {
         return testing::internal::UnitTestOptions::FilterMatchesTest(id.testSuiteName, id.testName);
     };
 
-    return FilterTests(fileLinesOut, gtestIDFilter);
-}
-
-std::vector<TestIdentifier> GetCompiledInTests(std::map<TestIdentifier, FileLine> *fileLinesOut)
-{
-    TestIdentifierFilter passthroughFilter = [](const TestIdentifier &id) { return true; };
-    return FilterTests(fileLinesOut, passthroughFilter);
+    return FilterTests(fileLinesOut, gtestIDFilter, alsoRunDisabledTests);
 }
 
 std::vector<TestIdentifier> GetShardTests(int shardIndex,
                                           int shardCount,
-                                          std::map<TestIdentifier, FileLine> *fileLinesOut)
+                                          std::map<TestIdentifier, FileLine> *fileLinesOut,
+                                          bool alsoRunDisabledTests)
 {
-    std::vector<TestIdentifier> allTests = GetCompiledInTests(fileLinesOut);
+    std::vector<TestIdentifier> allTests = GetFilteredTests(fileLinesOut, alsoRunDisabledTests);
     std::vector<TestIdentifier> shardTests;
 
     for (int testIndex = shardIndex; testIndex < static_cast<int>(allTests.size());
@@ -643,9 +654,10 @@ TestSuite::TestSuite(int *argc, char **argv)
       mTotalResultCount(0),
       mMaxProcesses(NumberOfProcessors()),
       mTestTimeout(kDefaultTestTimeout),
-      mBatchTimeout(60)
+      mBatchTimeout(kDefaultBatchTimeout)
 {
-    bool hasFilter = false;
+    bool hasFilter            = false;
+    bool alsoRunDisabledTests = false;
 
 #if defined(ANGLE_PLATFORM_WINDOWS)
     testing::GTEST_FLAG(catch_exceptions) = false;
@@ -678,6 +690,12 @@ TestSuite::TestSuite(int *argc, char **argv)
         }
         else
         {
+            // Don't include disabled tests in test lists unless the user asks for them.
+            if (strcmp("--gtest_also_run_disabled_tests", argv[argIndex]) == 0)
+            {
+                alsoRunDisabledTests = true;
+            }
+
             mGoogleTestCommandLineArgs.push_back(argv[argIndex]);
         }
         ++argIndex;
@@ -694,12 +712,6 @@ TestSuite::TestSuite(int *argc, char **argv)
         if (hasFilter)
         {
             printf("Cannot use gtest_filter in conjunction with a filter file.\n");
-            exit(1);
-        }
-
-        if (mShardCount > 0)
-        {
-            printf("Cannot use filter file in conjunction with sharding parameters.\n");
             exit(1);
         }
 
@@ -729,32 +741,31 @@ TestSuite::TestSuite(int *argc, char **argv)
         AddArg(argc, argv, mFilterString.c_str());
     }
 
-    // Call into gtest internals to force parameterized test name registration.
-    // TODO(jmadill): Clean this up so we don't need to call it.
-    testing::internal::UnitTestImpl *impl = testing::internal::GetUnitTestImpl();
-    impl->RegisterParameterizedTests();
-
     if (mShardCount > 0)
     {
-        if (hasFilter)
-        {
-            printf("Cannot use gtest_filter in conjunction with sharding parameters.\n");
-            exit(1);
-        }
+        // Call into gtest internals to force parameterized test name registration.
+        testing::internal::UnitTestImpl *impl = testing::internal::GetUnitTestImpl();
+        impl->RegisterParameterizedTests();
 
-        mTestQueue    = GetShardTests(mShardIndex, mShardCount, &mTestFileLines);
+        // Initialize internal GoogleTest filter arguments so we can call "FilterMatchesTest".
+        testing::internal::ParseGoogleTestFlagsOnly(argc, argv);
+
+        mTestQueue = GetShardTests(mShardIndex, mShardCount, &mTestFileLines, alsoRunDisabledTests);
         mFilterString = GetTestFilter(mTestQueue);
 
         // Note that we only add a filter string if we previously deleted a shader index/count
         // argument. So we will have space for the new filter string in argv.
         AddArg(argc, argv, mFilterString.c_str());
+
+        // Force-re-initialize GoogleTest flags to load the shard filter.
+        testing::internal::ParseGoogleTestFlagsOnly(argc, argv);
     }
 
     testing::InitGoogleTest(argc, argv);
 
     if (mShardCount <= 0)
     {
-        mTestQueue = GetFilteredTests(&mTestFileLines);
+        mTestQueue = GetFilteredTests(&mTestFileLines, alsoRunDisabledTests);
     }
 
     mTotalResultCount = mTestQueue.size();
@@ -778,7 +789,7 @@ TestSuite::TestSuite(int *argc, char **argv)
         listeners.Append(
             new TestEventListener(mResultsFile, mTestSuiteName.c_str(), &mTestResults));
 
-        std::vector<TestIdentifier> testList = GetFilteredTests(nullptr);
+        std::vector<TestIdentifier> testList = GetFilteredTests(nullptr, alsoRunDisabledTests);
 
         for (const TestIdentifier &id : testList)
         {

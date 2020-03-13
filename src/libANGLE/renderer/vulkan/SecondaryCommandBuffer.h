@@ -451,7 +451,7 @@ class SecondaryCommandBuffer final : angle::NonCopyable
 
     void bindIndexBuffer(const Buffer &buffer, VkDeviceSize offset, VkIndexType indexType);
 
-    void bindTransformFeedbackBuffers(size_t bindingCount,
+    void bindTransformFeedbackBuffers(uint32_t bindingCount,
                                       const VkBuffer *buffers,
                                       const VkDeviceSize *offsets,
                                       const VkDeviceSize *sizes);
@@ -559,7 +559,7 @@ class SecondaryCommandBuffer final : angle::NonCopyable
 
     void imageBarrier(VkPipelineStageFlags srcStageMask,
                       VkPipelineStageFlags dstStageMask,
-                      const VkImageMemoryBarrier *imageMemoryBarrier);
+                      const VkImageMemoryBarrier &imageMemoryBarrier);
 
     void memoryBarrier(VkPipelineStageFlags srcStageMask,
                        VkPipelineStageFlags dstStageMask,
@@ -634,6 +634,12 @@ class SecondaryCommandBuffer final : angle::NonCopyable
         allocateNewBlock();
         // Set first command to Invalid to start
         reinterpret_cast<CommandHeader *>(mCurrentWritePointer)->id = CommandID::Invalid;
+    }
+
+    void reset()
+    {
+        mCommands.clear();
+        initialize(mAllocator);
     }
 
     // This will cause the SecondaryCommandBuffer to become invalid by clearing its allocator
@@ -790,7 +796,7 @@ ANGLE_INLINE void SecondaryCommandBuffer::bindIndexBuffer(const Buffer &buffer,
     paramStruct->indexType = indexType;
 }
 
-ANGLE_INLINE void SecondaryCommandBuffer::bindTransformFeedbackBuffers(size_t bindingCount,
+ANGLE_INLINE void SecondaryCommandBuffer::bindTransformFeedbackBuffers(uint32_t bindingCount,
                                                                        const VkBuffer *buffers,
                                                                        const VkDeviceSize *offsets,
                                                                        const VkDeviceSize *sizes)
@@ -804,7 +810,7 @@ ANGLE_INLINE void SecondaryCommandBuffer::bindTransformFeedbackBuffers(size_t bi
                                                         buffersSize + offsetsSize + sizesSize,
                                                         &writePtr);
     // Copy params
-    paramStruct->bindingCount = static_cast<uint32_t>(bindingCount);
+    paramStruct->bindingCount = bindingCount;
     writePtr                  = storePointerParameter(writePtr, buffers, buffersSize);
     writePtr                  = storePointerParameter(writePtr, offsets, offsetsSize);
     storePointerParameter(writePtr, sizes, sizesSize);
@@ -1123,12 +1129,13 @@ ANGLE_INLINE void SecondaryCommandBuffer::fillBuffer(const Buffer &dstBuffer,
 ANGLE_INLINE void SecondaryCommandBuffer::imageBarrier(
     VkPipelineStageFlags srcStageMask,
     VkPipelineStageFlags dstStageMask,
-    const VkImageMemoryBarrier *imageMemoryBarrier)
+    const VkImageMemoryBarrier &imageMemoryBarrier)
 {
     ImageBarrierParams *paramStruct = initCommand<ImageBarrierParams>(CommandID::ImageBarrier);
+    ASSERT(imageMemoryBarrier.pNext == nullptr);
     paramStruct->srcStageMask       = srcStageMask;
     paramStruct->dstStageMask       = dstStageMask;
-    paramStruct->imageMemoryBarrier = *imageMemoryBarrier;
+    paramStruct->imageMemoryBarrier = imageMemoryBarrier;
 }
 
 ANGLE_INLINE void SecondaryCommandBuffer::memoryBarrier(VkPipelineStageFlags srcStageMask,

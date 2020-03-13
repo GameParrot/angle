@@ -14,6 +14,7 @@
 #include "common/utilities.h"
 #include "libANGLE/Caps.h"
 #include "libANGLE/formatutils.h"
+#include "libANGLE/renderer/driver_utils.h"
 #include "libANGLE/renderer/vulkan/DisplayVk.h"
 #include "libANGLE/renderer/vulkan/RendererVk.h"
 #include "vk_format_utils.h"
@@ -28,8 +29,10 @@ namespace rx
 
 GLint LimitToInt(const uint32_t physicalDeviceValue)
 {
+    // Limit to INT_MAX / 2 instead of INT_MAX.  If the limit is queried as float, the imprecision
+    // in floating point can cause the value to exceed INT_MAX.  This trips dEQP up.
     return std::min(physicalDeviceValue,
-                    static_cast<uint32_t>(std::numeric_limits<int32_t>::max()));
+                    static_cast<uint32_t>(std::numeric_limits<int32_t>::max() / 2));
 }
 
 void RendererVk::ensureCapsInitialized() const
@@ -45,13 +48,20 @@ void RendererVk::ensureCapsInitialized() const
 
     mNativeExtensions.setTextureExtensionSupport(mNativeTextureCaps);
 
+    // To ensure that ETC2/EAC formats are enabled only on hardware that supports them natively,
+    // this flag is not set by the function above and must be set explicitly. It exposes
+    // ANGLE_compressed_texture_etc extension string.
+    mNativeExtensions.compressedTextureETC =
+        (mPhysicalDeviceFeatures.textureCompressionETC2 == VK_TRUE) &&
+        gl::DetermineCompressedTextureETCSupport(mNativeTextureCaps);
+
     // Vulkan technically only supports the LDR profile but driver all appear to support the HDR
     // profile as well. http://anglebug.com/1185#c8
     mNativeExtensions.textureCompressionASTCHDRKHR = mNativeExtensions.textureCompressionASTCLDRKHR;
 
     // Enable this for simple buffer readback testing, but some functionality is missing.
     // TODO(jmadill): Support full mapBufferRange extension.
-    mNativeExtensions.mapBuffer              = true;
+    mNativeExtensions.mapBufferOES           = true;
     mNativeExtensions.mapBufferRange         = true;
     mNativeExtensions.textureStorage         = true;
     mNativeExtensions.drawBuffers            = true;
@@ -61,8 +71,9 @@ void RendererVk::ensureCapsInitialized() const
     mNativeExtensions.copyTexture            = true;
     mNativeExtensions.copyCompressedTexture  = true;
     mNativeExtensions.debugMarker            = true;
-    mNativeExtensions.robustness             = true;
-    mNativeExtensions.textureBorderClamp     = false;  // not implemented yet
+    mNativeExtensions.robustness =
+        !IsSwiftshader(mPhysicalDeviceProperties.vendorID, mPhysicalDeviceProperties.deviceID);
+    mNativeExtensions.textureBorderClampOES  = false;  // not implemented yet
     mNativeExtensions.translatedShaderSource = true;
     mNativeExtensions.discardFramebuffer     = true;
 
@@ -79,17 +90,21 @@ void RendererVk::ensureCapsInitialized() const
     // Enable EXT_blend_minmax
     mNativeExtensions.blendMinMax = true;
 
-    mNativeExtensions.eglImage              = true;
-    mNativeExtensions.eglImageExternal      = true;
-    mNativeExtensions.eglImageExternalEssl3 = true;
+    mNativeExtensions.eglImageOES              = true;
+    mNativeExtensions.eglImageExternalOES      = true;
+    mNativeExtensions.eglImageExternalEssl3OES = true;
 
     mNativeExtensions.memoryObject   = true;
     mNativeExtensions.memoryObjectFd = getFeatures().supportsExternalMemoryFd.enabled;
+    mNativeExtensions.memoryObjectFuchsiaANGLE =
+        getFeatures().supportsExternalMemoryFuchsia.enabled;
 
     mNativeExtensions.semaphore   = true;
     mNativeExtensions.semaphoreFd = getFeatures().supportsExternalSemaphoreFd.enabled;
+    mNativeExtensions.semaphoreFuchsiaANGLE =
+        getFeatures().supportsExternalSemaphoreFuchsia.enabled;
 
-    mNativeExtensions.vertexHalfFloat = true;
+    mNativeExtensions.vertexHalfFloatOES = true;
 
     // Enabled in HW if VK_EXT_vertex_attribute_divisor available, otherwise emulated
     mNativeExtensions.instancedArraysANGLE = true;
@@ -99,9 +114,9 @@ void RendererVk::ensureCapsInitialized() const
     mNativeExtensions.robustBufferAccessBehavior =
         (mPhysicalDeviceFeatures.robustBufferAccess == VK_TRUE);
 
-    mNativeExtensions.eglSync = true;
+    mNativeExtensions.eglSyncOES = true;
 
-    mNativeExtensions.vertexAttribType1010102 = true;
+    mNativeExtensions.vertexAttribType1010102OES = true;
 
     // We use secondary command buffers almost everywhere and they require a feature to be
     // able to execute in the presence of queries.  As a result, we won't support queries
@@ -124,20 +139,25 @@ void RendererVk::ensureCapsInitialized() const
         mNativeExtensions.textureFilterAnisotropic ? limitsVk.maxSamplerAnisotropy : 0.0f;
 
     // Vulkan natively supports non power-of-two textures
-    mNativeExtensions.textureNPOT = true;
+    mNativeExtensions.textureNPOTOES = true;
 
     mNativeExtensions.texture3DOES = true;
 
     // Vulkan natively supports standard derivatives
-    mNativeExtensions.standardDerivatives = true;
+    mNativeExtensions.standardDerivativesOES = true;
 
     // Vulkan natively supports 32-bit indices, entry in kIndexTypeMap
-    mNativeExtensions.elementIndexUint = true;
+    mNativeExtensions.elementIndexUintOES = true;
 
-    mNativeExtensions.fboRenderMipmap = true;
+    mNativeExtensions.fboRenderMipmapOES = true;
 
     // We support getting image data for Textures and Renderbuffers.
     mNativeExtensions.getImageANGLE = true;
+
+    // Vulkan has no restrictions of the format of cubemaps, so if the proper formats are supported,
+    // creating a cube of any of these formats should be implicitly supported.
+    mNativeExtensions.depthTextureCubeMapOES =
+        mNativeExtensions.depthTextureOES && mNativeExtensions.packedDepthStencilOES;
 
     mNativeExtensions.gpuShader5EXT = vk::CanSupportGPUShader5EXT(mPhysicalDeviceFeatures);
 
@@ -429,8 +449,27 @@ void RendererVk::ensureCapsInitialized() const
     // vars section. It is implicit that we need to actually reserve it for Vulkan in that case.
     GLint reservedVaryingVectorCount = 1;
 
-    mNativeCaps.maxVaryingVectors = LimitToInt(
-        (limitsVk.maxVertexOutputComponents / kComponentsPerVector) - reservedVaryingVectorCount);
+    // reserve 1 extra for ANGLEPosition when GLLineRasterization is enabled
+    constexpr GLint kRservedVaryingForGLLineRasterization = 1;
+    // reserve 2 extra for builtin varables when feedback is enabled
+    // possible capturable out varable: gl_Position, gl_PointSize
+    // https://www.khronos.org/registry/OpenGL/specs/es/3.1/GLSL_ES_Specification_3.10.withchanges.pdf
+    // page 105
+    constexpr GLint kReservedVaryingForTransformFeedbackExtension = 2;
+
+    if (getFeatures().basicGLLineRasterization.enabled)
+    {
+        reservedVaryingVectorCount += kRservedVaryingForGLLineRasterization;
+    }
+    if (getFeatures().supportsTransformFeedbackExtension.enabled)
+    {
+        reservedVaryingVectorCount += kReservedVaryingForTransformFeedbackExtension;
+    }
+
+    const GLint maxVaryingCount =
+        std::min(limitsVk.maxVertexOutputComponents, limitsVk.maxFragmentInputComponents);
+    mNativeCaps.maxVaryingVectors =
+        LimitToInt((maxVaryingCount / kComponentsPerVector) - reservedVaryingVectorCount);
     mNativeCaps.maxVertexOutputComponents = LimitToInt(limitsVk.maxVertexOutputComponents);
 
     mNativeCaps.maxTransformFeedbackInterleavedComponents =
@@ -453,11 +492,14 @@ void RendererVk::ensureCapsInitialized() const
     mNativeCaps.subPixelBits = limitsVk.subPixelPrecisionBits;
 
     // Enable Program Binary extension.
-    mNativeExtensions.getProgramBinary = true;
+    mNativeExtensions.getProgramBinaryOES = true;
     mNativeCaps.programBinaryFormats.push_back(GL_PROGRAM_BINARY_ANGLE);
 
     // Enable GL_NV_pixel_buffer_object extension.
-    mNativeExtensions.pixelBufferObject = true;
+    mNativeExtensions.pixelBufferObjectNV = true;
+
+    // Enable GL_NV_fence extension.
+    mNativeExtensions.fenceNV = true;
 
     // Geometry shader is optional.
     if (mPhysicalDeviceFeatures.geometryShader)
@@ -558,7 +600,7 @@ egl::Config GenerateDefaultConfig(const RendererVk *renderer,
     config.bindToTextureRGB   = colorFormat.format == GL_RGB;
     config.bindToTextureRGBA  = colorFormat.format == GL_RGBA || colorFormat.format == GL_BGRA_EXT;
     config.colorBufferType    = EGL_RGB_BUFFER;
-    config.configCaveat       = EGL_NONE;
+    config.configCaveat       = GetConfigCaveat(colorFormat.internalFormat);
     config.conformant         = es2Support | es3Support;
     config.depthSize          = depthStencilFormat.depthBits;
     config.stencilSize        = depthStencilFormat.stencilBits;

@@ -405,13 +405,19 @@ void InitShaderStorageBlockLinker(const ProgramState &state, ShaderStorageBlockL
 }
 
 // Find the matching varying or field by name.
-const sh::ShaderVariable *FindVaryingOrField(const ProgramMergedVaryings &varyings,
-                                             const std::string &name)
+const sh::ShaderVariable *FindOutputVaryingOrField(const ProgramMergedVaryings &varyings,
+                                                   ShaderType stage,
+                                                   const std::string &name)
 {
     const sh::ShaderVariable *var = nullptr;
-    for (const auto &ref : varyings)
+    for (const ProgramVaryingRef &ref : varyings)
     {
-        const sh::ShaderVariable *varying = ref.second.get();
+        if (ref.frontShaderStage != stage)
+        {
+            continue;
+        }
+
+        const sh::ShaderVariable *varying = ref.get(stage);
         if (varying->name == name)
         {
             var = varying;
@@ -472,6 +478,8 @@ const char *GetLinkMismatchErrorString(LinkMismatchError linkError)
             return "Offset layout qualifier";
         case LinkMismatchError::INSTANCE_NAME_MISMATCH:
             return "Instance name qualifier";
+        case LinkMismatchError::FORMAT_MISMATCH:
+            return "Format qualifier";
 
         case LinkMismatchError::LAYOUT_QUALIFIER_MISMATCH:
             return "Layout qualifier";
@@ -651,6 +659,7 @@ void WriteShaderVar(BinaryOutputStream *stream, const sh::ShaderVariable &var)
     stream->writeIntVector(var.arraySizes);
     stream->writeInt(var.staticUse);
     stream->writeInt(var.active);
+    stream->writeInt(var.binding);
     stream->writeString(var.structName);
     stream->writeInt(var.hasParentArrayIndex() ? var.parentArrayIndex() : -1);
     ASSERT(var.fields.empty());
@@ -665,6 +674,7 @@ void LoadShaderVar(BinaryInputStream *stream, sh::ShaderVariable *var)
     stream->readIntVector<unsigned int>(&var->arraySizes);
     var->staticUse  = stream->readBool();
     var->active     = stream->readBool();
+    var->binding    = stream->readInt<int>();
     var->structName = stream->readString();
     var->setParentArrayIndex(stream->readInt<int>());
 }
@@ -991,6 +1001,18 @@ int ProgramAliasedBindings::getBindingByName(const std::string &name) const
     return (iter != mBindings.end()) ? iter->second.location : -1;
 }
 
+int ProgramAliasedBindings::getBindingByLocation(GLuint location) const
+{
+    for (const auto &iter : mBindings)
+    {
+        if (iter.second.location == location)
+        {
+            return iter.second.location;
+        }
+    }
+    return -1;
+}
+
 int ProgramAliasedBindings::getBinding(const sh::ShaderVariable &variable) const
 {
     const std::string &name = variable.name;
@@ -1059,6 +1081,7 @@ ProgramState::ProgramState()
       mAttachedShaders{},
       mTransformFeedbackBufferMode(GL_INTERLEAVED_ATTRIBS),
       mMaxActiveAttribLocation(0),
+      mDefaultUniformRange(0, 0),
       mSamplerUniformRange(0, 0),
       mImageUniformRange(0, 0),
       mAtomicCounterUniformRange(0, 0),
@@ -1117,13 +1140,13 @@ GLuint ProgramState::getBufferVariableIndexFromName(const std::string &name) con
     return GetResourceIndexFromName(mBufferVariables, name);
 }
 
-GLuint ProgramState::getUniformIndexFromLocation(GLint location) const
+GLuint ProgramState::getUniformIndexFromLocation(UniformLocation location) const
 {
-    ASSERT(location >= 0 && static_cast<size_t>(location) < mUniformLocations.size());
-    return mUniformLocations[location].index;
+    ASSERT(location.value >= 0 && static_cast<size_t>(location.value) < mUniformLocations.size());
+    return mUniformLocations[location.value].index;
 }
 
-Optional<GLuint> ProgramState::getSamplerIndex(GLint location) const
+Optional<GLuint> ProgramState::getSamplerIndex(UniformLocation location) const
 {
     GLuint index = getUniformIndexFromLocation(location);
     if (!isSamplerUniformIndex(index))
@@ -1232,7 +1255,8 @@ ShaderType ProgramState::getLastAttachedShaderStageType() const
 }
 
 Program::Program(rx::GLImplFactory *factory, ShaderProgramManager *manager, ShaderProgramID handle)
-    : mProgram(factory->createProgram(mState)),
+    : mSerial(factory->generateSerial()),
+      mProgram(factory->createProgram(mState)),
       mValidated(false),
       mLinked(false),
       mLinkResolved(true),
@@ -1336,10 +1360,10 @@ void Program::bindAttributeLocation(GLuint index, const char *name)
     mAttributeBindings.bindLocation(index, name);
 }
 
-void Program::bindUniformLocation(GLuint index, const char *name)
+void Program::bindUniformLocation(UniformLocation location, const char *name)
 {
     ASSERT(mLinkResolved);
-    mUniformLocationBindings.bindLocation(index, name);
+    mState.mUniformLocationBindings.bindLocation(location.value, name);
 }
 
 void Program::bindFragmentInputLocation(GLint index, const char *name)
@@ -1488,7 +1512,7 @@ angle::Result Program::link(const Context *context)
 
         GLuint combinedImageUniforms = 0u;
         if (!linkUniforms(context->getCaps(), context->getClientVersion(), mInfoLog,
-                          mUniformLocationBindings, &combinedImageUniforms,
+                          mState.mUniformLocationBindings, &combinedImageUniforms,
                           &resources->unusedUniforms))
         {
             return angle::Result::Continue;
@@ -1553,7 +1577,7 @@ angle::Result Program::link(const Context *context)
 
         GLuint combinedImageUniforms = 0u;
         if (!linkUniforms(context->getCaps(), context->getClientVersion(), mInfoLog,
-                          mUniformLocationBindings, &combinedImageUniforms,
+                          mState.mUniformLocationBindings, &combinedImageUniforms,
                           &resources->unusedUniforms))
         {
             return angle::Result::Continue;
@@ -1579,7 +1603,7 @@ angle::Result Program::link(const Context *context)
             return angle::Result::Continue;
         }
 
-        const auto &mergedVaryings = getMergedVaryings();
+        const ProgramMergedVaryings &mergedVaryings = getMergedVaryings();
 
         gl::Shader *vertexShader = mState.mAttachedShaders[ShaderType::Vertex];
         if (vertexShader)
@@ -1590,19 +1614,22 @@ angle::Result Program::link(const Context *context)
         InitUniformBlockLinker(mState, &resources->uniformBlockLinker);
         InitShaderStorageBlockLinker(mState, &resources->shaderStorageBlockLinker);
 
+        ShaderType tfStage = mState.mAttachedShaders[ShaderType::Geometry] ? ShaderType::Geometry
+                                                                           : ShaderType::Vertex;
+
         if (!linkValidateTransformFeedback(context->getClientVersion(), mInfoLog, mergedVaryings,
-                                           context->getCaps()))
+                                           tfStage, context->getCaps()))
         {
             return angle::Result::Continue;
         }
 
         if (!resources->varyingPacking.collectAndPackUserVaryings(
-                mInfoLog, mergedVaryings, mState.getTransformFeedbackVaryingNames()))
+                mInfoLog, mergedVaryings, mState.getTransformFeedbackVaryingNames(), isSeparable()))
         {
             return angle::Result::Continue;
         }
 
-        gatherTransformFeedbackVaryings(mergedVaryings);
+        gatherTransformFeedbackVaryings(mergedVaryings, tfStage);
         mState.updateTransformFeedbackStrides();
     }
 
@@ -1660,17 +1687,18 @@ void Program::resolveLinkImpl(const Context *context)
     // Must be called after markUnusedUniformLocations.
     postResolveLink(context);
 
-    // TODO(syoussefi): this might need to be moved to postResolveLink() so it will be called from
-    // deserialize() as well.  http://anglebug.com/3089
-    setUniformValuesFromBindingQualifiers();
-
     // Save to the program cache.
     MemoryProgramCache *cache = context->getMemoryProgramCache();
     if (cache &&
         (mState.mLinkedTransformFeedbackVaryings.empty() ||
          !context->getFrontendFeatures().disableProgramCachingForTransformFeedback.enabled))
     {
-        cache->putProgram(linkingState->programHash, context, this);
+        if (cache->putProgram(linkingState->programHash, context, this) == angle::Result::Stop)
+        {
+            // Don't fail linking if putting the program binary into the cache fails, the program is
+            // still usable.
+            WARN() << "Failed to save linked program to memory program cache.";
+        }
     }
 }
 
@@ -1940,7 +1968,7 @@ angle::Result Program::saveBinary(Context *context,
     }
 
     angle::MemoryBuffer memoryBuf;
-    serialize(context, &memoryBuf);
+    ANGLE_TRY(serialize(context, &memoryBuf));
 
     GLsizei streamLength       = static_cast<GLsizei>(memoryBuf.size());
     const uint8_t *streamState = memoryBuf.data();
@@ -2426,7 +2454,7 @@ const ProgramBindings &Program::getAttributeBindings() const
 const ProgramAliasedBindings &Program::getUniformLocationBindings() const
 {
     ASSERT(mLinkResolved);
-    return mUniformLocationBindings;
+    return mState.mUniformLocationBindings;
 }
 const ProgramBindings &Program::getFragmentInputBindings() const
 {
@@ -2565,26 +2593,29 @@ GLint Program::getActiveUniformMaxLength() const
     return static_cast<GLint>(maxLength);
 }
 
-bool Program::isValidUniformLocation(GLint location) const
+bool Program::isValidUniformLocation(UniformLocation location) const
 {
     ASSERT(mLinkResolved);
     ASSERT(angle::IsValueInRangeForNumericType<GLint>(mState.mUniformLocations.size()));
-    return (location >= 0 && static_cast<size_t>(location) < mState.mUniformLocations.size() &&
-            mState.mUniformLocations[static_cast<size_t>(location)].used());
+    return (location.value >= 0 &&
+            static_cast<size_t>(location.value) < mState.mUniformLocations.size() &&
+            mState.mUniformLocations[static_cast<size_t>(location.value)].used());
 }
 
-const LinkedUniform &Program::getUniformByLocation(GLint location) const
+const LinkedUniform &Program::getUniformByLocation(UniformLocation location) const
 {
     ASSERT(mLinkResolved);
-    ASSERT(location >= 0 && static_cast<size_t>(location) < mState.mUniformLocations.size());
+    ASSERT(location.value >= 0 &&
+           static_cast<size_t>(location.value) < mState.mUniformLocations.size());
     return mState.mUniforms[mState.getUniformIndexFromLocation(location)];
 }
 
-const VariableLocation &Program::getUniformLocation(GLint location) const
+const VariableLocation &Program::getUniformLocation(UniformLocation location) const
 {
     ASSERT(mLinkResolved);
-    ASSERT(location >= 0 && static_cast<size_t>(location) < mState.mUniformLocations.size());
-    return mState.mUniformLocations[location];
+    ASSERT(location.value >= 0 &&
+           static_cast<size_t>(location.value) < mState.mUniformLocations.size());
+    return mState.mUniformLocations[location.value];
 }
 
 const BufferVariable &Program::getBufferVariableByIndex(GLuint index) const
@@ -2594,10 +2625,10 @@ const BufferVariable &Program::getBufferVariableByIndex(GLuint index) const
     return mState.mBufferVariables[index];
 }
 
-GLint Program::getUniformLocation(const std::string &name) const
+UniformLocation Program::getUniformLocation(const std::string &name) const
 {
     ASSERT(mLinkResolved);
-    return GetVariableLocation(mState.mUniforms, mState.mUniformLocations, name);
+    return {GetVariableLocation(mState.mUniforms, mState.mUniformLocations, name)};
 }
 
 GLuint Program::getUniformIndex(const std::string &name) const
@@ -2606,45 +2637,88 @@ GLuint Program::getUniformIndex(const std::string &name) const
     return mState.getUniformIndexFromName(name);
 }
 
-void Program::setUniform1fv(GLint location, GLsizei count, const GLfloat *v)
+bool Program::shouldIgnoreUniform(UniformLocation location) const
 {
-    ASSERT(mLinkResolved);
-    const VariableLocation &locationInfo = mState.mUniformLocations[location];
-    GLsizei clampedCount                 = clampUniformCount(locationInfo, count, 1, v);
-    mProgram->setUniform1fv(location, clampedCount, v);
+    if (location.value == -1)
+    {
+        return true;
+    }
+
+    if (mState.mUniformLocations[static_cast<size_t>(location.value)].ignored)
+    {
+        return true;
+    }
+
+    return false;
 }
 
-void Program::setUniform2fv(GLint location, GLsizei count, const GLfloat *v)
+void Program::setUniform1fv(UniformLocation location, GLsizei count, const GLfloat *v)
 {
     ASSERT(mLinkResolved);
-    const VariableLocation &locationInfo = mState.mUniformLocations[location];
+    if (shouldIgnoreUniform(location))
+    {
+        return;
+    }
+
+    const VariableLocation &locationInfo = mState.mUniformLocations[location.value];
+    GLsizei clampedCount                 = clampUniformCount(locationInfo, count, 1, v);
+    mProgram->setUniform1fv(location.value, clampedCount, v);
+}
+
+void Program::setUniform2fv(UniformLocation location, GLsizei count, const GLfloat *v)
+{
+    ASSERT(mLinkResolved);
+    if (shouldIgnoreUniform(location))
+    {
+        return;
+    }
+
+    const VariableLocation &locationInfo = mState.mUniformLocations[location.value];
     GLsizei clampedCount                 = clampUniformCount(locationInfo, count, 2, v);
-    mProgram->setUniform2fv(location, clampedCount, v);
+    mProgram->setUniform2fv(location.value, clampedCount, v);
 }
 
-void Program::setUniform3fv(GLint location, GLsizei count, const GLfloat *v)
+void Program::setUniform3fv(UniformLocation location, GLsizei count, const GLfloat *v)
 {
     ASSERT(mLinkResolved);
-    const VariableLocation &locationInfo = mState.mUniformLocations[location];
+    if (shouldIgnoreUniform(location))
+    {
+        return;
+    }
+
+    const VariableLocation &locationInfo = mState.mUniformLocations[location.value];
     GLsizei clampedCount                 = clampUniformCount(locationInfo, count, 3, v);
-    mProgram->setUniform3fv(location, clampedCount, v);
+    mProgram->setUniform3fv(location.value, clampedCount, v);
 }
 
-void Program::setUniform4fv(GLint location, GLsizei count, const GLfloat *v)
+void Program::setUniform4fv(UniformLocation location, GLsizei count, const GLfloat *v)
 {
     ASSERT(mLinkResolved);
-    const VariableLocation &locationInfo = mState.mUniformLocations[location];
+    if (shouldIgnoreUniform(location))
+    {
+        return;
+    }
+
+    const VariableLocation &locationInfo = mState.mUniformLocations[location.value];
     GLsizei clampedCount                 = clampUniformCount(locationInfo, count, 4, v);
-    mProgram->setUniform4fv(location, clampedCount, v);
+    mProgram->setUniform4fv(location.value, clampedCount, v);
 }
 
-void Program::setUniform1iv(Context *context, GLint location, GLsizei count, const GLint *v)
+void Program::setUniform1iv(Context *context,
+                            UniformLocation location,
+                            GLsizei count,
+                            const GLint *v)
 {
     ASSERT(mLinkResolved);
-    const VariableLocation &locationInfo = mState.mUniformLocations[location];
+    if (shouldIgnoreUniform(location))
+    {
+        return;
+    }
+
+    const VariableLocation &locationInfo = mState.mUniformLocations[location.value];
     GLsizei clampedCount                 = clampUniformCount(locationInfo, count, 1, v);
 
-    mProgram->setUniform1iv(location, clampedCount, v);
+    mProgram->setUniform1iv(location.value, clampedCount, v);
 
     if (mState.isSamplerUniformIndex(locationInfo.index))
     {
@@ -2652,150 +2726,230 @@ void Program::setUniform1iv(Context *context, GLint location, GLsizei count, con
     }
 }
 
-void Program::setUniform2iv(GLint location, GLsizei count, const GLint *v)
+void Program::setUniform2iv(UniformLocation location, GLsizei count, const GLint *v)
 {
     ASSERT(mLinkResolved);
-    const VariableLocation &locationInfo = mState.mUniformLocations[location];
+    if (shouldIgnoreUniform(location))
+    {
+        return;
+    }
+
+    const VariableLocation &locationInfo = mState.mUniformLocations[location.value];
     GLsizei clampedCount                 = clampUniformCount(locationInfo, count, 2, v);
-    mProgram->setUniform2iv(location, clampedCount, v);
+    mProgram->setUniform2iv(location.value, clampedCount, v);
 }
 
-void Program::setUniform3iv(GLint location, GLsizei count, const GLint *v)
+void Program::setUniform3iv(UniformLocation location, GLsizei count, const GLint *v)
 {
     ASSERT(mLinkResolved);
-    const VariableLocation &locationInfo = mState.mUniformLocations[location];
+    if (shouldIgnoreUniform(location))
+    {
+        return;
+    }
+
+    const VariableLocation &locationInfo = mState.mUniformLocations[location.value];
     GLsizei clampedCount                 = clampUniformCount(locationInfo, count, 3, v);
-    mProgram->setUniform3iv(location, clampedCount, v);
+    mProgram->setUniform3iv(location.value, clampedCount, v);
 }
 
-void Program::setUniform4iv(GLint location, GLsizei count, const GLint *v)
+void Program::setUniform4iv(UniformLocation location, GLsizei count, const GLint *v)
 {
     ASSERT(mLinkResolved);
-    const VariableLocation &locationInfo = mState.mUniformLocations[location];
+    if (shouldIgnoreUniform(location))
+    {
+        return;
+    }
+
+    const VariableLocation &locationInfo = mState.mUniformLocations[location.value];
     GLsizei clampedCount                 = clampUniformCount(locationInfo, count, 4, v);
-    mProgram->setUniform4iv(location, clampedCount, v);
+    mProgram->setUniform4iv(location.value, clampedCount, v);
 }
 
-void Program::setUniform1uiv(GLint location, GLsizei count, const GLuint *v)
+void Program::setUniform1uiv(UniformLocation location, GLsizei count, const GLuint *v)
 {
     ASSERT(mLinkResolved);
-    const VariableLocation &locationInfo = mState.mUniformLocations[location];
+    if (shouldIgnoreUniform(location))
+    {
+        return;
+    }
+
+    const VariableLocation &locationInfo = mState.mUniformLocations[location.value];
     GLsizei clampedCount                 = clampUniformCount(locationInfo, count, 1, v);
-    mProgram->setUniform1uiv(location, clampedCount, v);
+    mProgram->setUniform1uiv(location.value, clampedCount, v);
 }
 
-void Program::setUniform2uiv(GLint location, GLsizei count, const GLuint *v)
+void Program::setUniform2uiv(UniformLocation location, GLsizei count, const GLuint *v)
 {
     ASSERT(mLinkResolved);
-    const VariableLocation &locationInfo = mState.mUniformLocations[location];
+    if (shouldIgnoreUniform(location))
+    {
+        return;
+    }
+
+    const VariableLocation &locationInfo = mState.mUniformLocations[location.value];
     GLsizei clampedCount                 = clampUniformCount(locationInfo, count, 2, v);
-    mProgram->setUniform2uiv(location, clampedCount, v);
+    mProgram->setUniform2uiv(location.value, clampedCount, v);
 }
 
-void Program::setUniform3uiv(GLint location, GLsizei count, const GLuint *v)
+void Program::setUniform3uiv(UniformLocation location, GLsizei count, const GLuint *v)
 {
     ASSERT(mLinkResolved);
-    const VariableLocation &locationInfo = mState.mUniformLocations[location];
+    if (shouldIgnoreUniform(location))
+    {
+        return;
+    }
+
+    const VariableLocation &locationInfo = mState.mUniformLocations[location.value];
     GLsizei clampedCount                 = clampUniformCount(locationInfo, count, 3, v);
-    mProgram->setUniform3uiv(location, clampedCount, v);
+    mProgram->setUniform3uiv(location.value, clampedCount, v);
 }
 
-void Program::setUniform4uiv(GLint location, GLsizei count, const GLuint *v)
+void Program::setUniform4uiv(UniformLocation location, GLsizei count, const GLuint *v)
 {
     ASSERT(mLinkResolved);
-    const VariableLocation &locationInfo = mState.mUniformLocations[location];
+    if (shouldIgnoreUniform(location))
+    {
+        return;
+    }
+
+    const VariableLocation &locationInfo = mState.mUniformLocations[location.value];
     GLsizei clampedCount                 = clampUniformCount(locationInfo, count, 4, v);
-    mProgram->setUniform4uiv(location, clampedCount, v);
+    mProgram->setUniform4uiv(location.value, clampedCount, v);
 }
 
-void Program::setUniformMatrix2fv(GLint location,
+void Program::setUniformMatrix2fv(UniformLocation location,
                                   GLsizei count,
                                   GLboolean transpose,
                                   const GLfloat *v)
 {
     ASSERT(mLinkResolved);
+    if (shouldIgnoreUniform(location))
+    {
+        return;
+    }
+
     GLsizei clampedCount = clampMatrixUniformCount<2, 2>(location, count, transpose, v);
-    mProgram->setUniformMatrix2fv(location, clampedCount, transpose, v);
+    mProgram->setUniformMatrix2fv(location.value, clampedCount, transpose, v);
 }
 
-void Program::setUniformMatrix3fv(GLint location,
+void Program::setUniformMatrix3fv(UniformLocation location,
                                   GLsizei count,
                                   GLboolean transpose,
                                   const GLfloat *v)
 {
     ASSERT(mLinkResolved);
+    if (shouldIgnoreUniform(location))
+    {
+        return;
+    }
+
     GLsizei clampedCount = clampMatrixUniformCount<3, 3>(location, count, transpose, v);
-    mProgram->setUniformMatrix3fv(location, clampedCount, transpose, v);
+    mProgram->setUniformMatrix3fv(location.value, clampedCount, transpose, v);
 }
 
-void Program::setUniformMatrix4fv(GLint location,
+void Program::setUniformMatrix4fv(UniformLocation location,
                                   GLsizei count,
                                   GLboolean transpose,
                                   const GLfloat *v)
 {
     ASSERT(mLinkResolved);
+    if (shouldIgnoreUniform(location))
+    {
+        return;
+    }
+
     GLsizei clampedCount = clampMatrixUniformCount<4, 4>(location, count, transpose, v);
-    mProgram->setUniformMatrix4fv(location, clampedCount, transpose, v);
+    mProgram->setUniformMatrix4fv(location.value, clampedCount, transpose, v);
 }
 
-void Program::setUniformMatrix2x3fv(GLint location,
+void Program::setUniformMatrix2x3fv(UniformLocation location,
                                     GLsizei count,
                                     GLboolean transpose,
                                     const GLfloat *v)
 {
     ASSERT(mLinkResolved);
+    if (shouldIgnoreUniform(location))
+    {
+        return;
+    }
+
     GLsizei clampedCount = clampMatrixUniformCount<2, 3>(location, count, transpose, v);
-    mProgram->setUniformMatrix2x3fv(location, clampedCount, transpose, v);
+    mProgram->setUniformMatrix2x3fv(location.value, clampedCount, transpose, v);
 }
 
-void Program::setUniformMatrix2x4fv(GLint location,
+void Program::setUniformMatrix2x4fv(UniformLocation location,
                                     GLsizei count,
                                     GLboolean transpose,
                                     const GLfloat *v)
 {
     ASSERT(mLinkResolved);
+    if (shouldIgnoreUniform(location))
+    {
+        return;
+    }
+
     GLsizei clampedCount = clampMatrixUniformCount<2, 4>(location, count, transpose, v);
-    mProgram->setUniformMatrix2x4fv(location, clampedCount, transpose, v);
+    mProgram->setUniformMatrix2x4fv(location.value, clampedCount, transpose, v);
 }
 
-void Program::setUniformMatrix3x2fv(GLint location,
+void Program::setUniformMatrix3x2fv(UniformLocation location,
                                     GLsizei count,
                                     GLboolean transpose,
                                     const GLfloat *v)
 {
     ASSERT(mLinkResolved);
+    if (shouldIgnoreUniform(location))
+    {
+        return;
+    }
+
     GLsizei clampedCount = clampMatrixUniformCount<3, 2>(location, count, transpose, v);
-    mProgram->setUniformMatrix3x2fv(location, clampedCount, transpose, v);
+    mProgram->setUniformMatrix3x2fv(location.value, clampedCount, transpose, v);
 }
 
-void Program::setUniformMatrix3x4fv(GLint location,
+void Program::setUniformMatrix3x4fv(UniformLocation location,
                                     GLsizei count,
                                     GLboolean transpose,
                                     const GLfloat *v)
 {
     ASSERT(mLinkResolved);
+    if (shouldIgnoreUniform(location))
+    {
+        return;
+    }
+
     GLsizei clampedCount = clampMatrixUniformCount<3, 4>(location, count, transpose, v);
-    mProgram->setUniformMatrix3x4fv(location, clampedCount, transpose, v);
+    mProgram->setUniformMatrix3x4fv(location.value, clampedCount, transpose, v);
 }
 
-void Program::setUniformMatrix4x2fv(GLint location,
+void Program::setUniformMatrix4x2fv(UniformLocation location,
                                     GLsizei count,
                                     GLboolean transpose,
                                     const GLfloat *v)
 {
     ASSERT(mLinkResolved);
+    if (shouldIgnoreUniform(location))
+    {
+        return;
+    }
+
     GLsizei clampedCount = clampMatrixUniformCount<4, 2>(location, count, transpose, v);
-    mProgram->setUniformMatrix4x2fv(location, clampedCount, transpose, v);
+    mProgram->setUniformMatrix4x2fv(location.value, clampedCount, transpose, v);
 }
 
-void Program::setUniformMatrix4x3fv(GLint location,
+void Program::setUniformMatrix4x3fv(UniformLocation location,
                                     GLsizei count,
                                     GLboolean transpose,
                                     const GLfloat *v)
 {
     ASSERT(mLinkResolved);
+    if (shouldIgnoreUniform(location))
+    {
+        return;
+    }
+
     GLsizei clampedCount = clampMatrixUniformCount<4, 3>(location, count, transpose, v);
-    mProgram->setUniformMatrix4x3fv(location, clampedCount, transpose, v);
+    mProgram->setUniformMatrix4x3fv(location.value, clampedCount, transpose, v);
 }
 
 GLuint Program::getSamplerUniformBinding(const VariableLocation &uniformLocation) const
@@ -2815,10 +2969,10 @@ GLuint Program::getImageUniformBinding(const VariableLocation &uniformLocation) 
     return boundImageUnits[uniformLocation.arrayIndex];
 }
 
-void Program::getUniformfv(const Context *context, GLint location, GLfloat *v) const
+void Program::getUniformfv(const Context *context, UniformLocation location, GLfloat *v) const
 {
     ASSERT(mLinkResolved);
-    const VariableLocation &uniformLocation = mState.getUniformLocations()[location];
+    const VariableLocation &uniformLocation = mState.getUniformLocations()[location.value];
     const LinkedUniform &uniform            = mState.getUniforms()[uniformLocation.index];
 
     if (uniform.isSampler())
@@ -2835,7 +2989,7 @@ void Program::getUniformfv(const Context *context, GLint location, GLfloat *v) c
     const GLenum nativeType = gl::VariableComponentType(uniform.type);
     if (nativeType == GL_FLOAT)
     {
-        mProgram->getUniformfv(context, location, v);
+        mProgram->getUniformfv(context, location.value, v);
     }
     else
     {
@@ -2843,10 +2997,10 @@ void Program::getUniformfv(const Context *context, GLint location, GLfloat *v) c
     }
 }
 
-void Program::getUniformiv(const Context *context, GLint location, GLint *v) const
+void Program::getUniformiv(const Context *context, UniformLocation location, GLint *v) const
 {
     ASSERT(mLinkResolved);
-    const VariableLocation &uniformLocation = mState.getUniformLocations()[location];
+    const VariableLocation &uniformLocation = mState.getUniformLocations()[location.value];
     const LinkedUniform &uniform            = mState.getUniforms()[uniformLocation.index];
 
     if (uniform.isSampler())
@@ -2863,7 +3017,7 @@ void Program::getUniformiv(const Context *context, GLint location, GLint *v) con
     const GLenum nativeType = gl::VariableComponentType(uniform.type);
     if (nativeType == GL_INT || nativeType == GL_BOOL)
     {
-        mProgram->getUniformiv(context, location, v);
+        mProgram->getUniformiv(context, location.value, v);
     }
     else
     {
@@ -2871,10 +3025,10 @@ void Program::getUniformiv(const Context *context, GLint location, GLint *v) con
     }
 }
 
-void Program::getUniformuiv(const Context *context, GLint location, GLuint *v) const
+void Program::getUniformuiv(const Context *context, UniformLocation location, GLuint *v) const
 {
     ASSERT(mLinkResolved);
-    const VariableLocation &uniformLocation = mState.getUniformLocations()[location];
+    const VariableLocation &uniformLocation = mState.getUniformLocations()[location.value];
     const LinkedUniform &uniform            = mState.getUniforms()[uniformLocation.index];
 
     if (uniform.isSampler())
@@ -2891,7 +3045,7 @@ void Program::getUniformuiv(const Context *context, GLint location, GLuint *v) c
     const GLenum nativeType = VariableComponentType(uniform.type);
     if (nativeType == GL_UNSIGNED_INT)
     {
-        mProgram->getUniformuiv(context, location, v);
+        mProgram->getUniformuiv(context, location.value, v);
     }
     else
     {
@@ -3613,6 +3767,9 @@ void Program::linkSamplerAndImageBindings(GLuint *combinedImageUniforms)
         SamplerFormat format       = samplerUniform.typeInfo->samplerFormat;
         mState.mSamplerBindings.emplace_back(textureType, format, elementCount, false);
     }
+
+    // Whatever is left constitutes the default uniforms.
+    mState.mDefaultUniformRange = RangeUI(0, low);
 }
 
 bool Program::linkAtomicCounterBuffers()
@@ -3933,6 +4090,10 @@ LinkMismatchError Program::LinkValidateVariablesBase(const sh::ShaderVariable &v
     {
         return LinkMismatchError::STRUCT_NAME_MISMATCH;
     }
+    if (variable1.imageUnitFormat != variable2.imageUnitFormat)
+    {
+        return LinkMismatchError::FORMAT_MISMATCH;
+    }
 
     if (variable1.fields.size() != variable2.fields.size())
     {
@@ -4091,6 +4252,7 @@ bool Program::linkValidateBuiltInVaryings(InfoLog &infoLog) const
 bool Program::linkValidateTransformFeedback(const Version &version,
                                             InfoLog &infoLog,
                                             const ProgramMergedVaryings &varyings,
+                                            ShaderType stage,
                                             const Caps &caps) const
 {
 
@@ -4131,7 +4293,7 @@ bool Program::linkValidateTransformFeedback(const Version &version,
         std::vector<unsigned int> subscripts;
         std::string baseName = ParseResourceName(tfVaryingName, &subscripts);
 
-        const sh::ShaderVariable *var = FindVaryingOrField(varyings, baseName);
+        const sh::ShaderVariable *var = FindOutputVaryingOrField(varyings, stage, baseName);
         if (var == nullptr)
         {
             infoLog << "Transform feedback varying " << tfVaryingName
@@ -4312,7 +4474,8 @@ bool Program::linkValidateGlobalNames(InfoLog &infoLog) const
     return true;
 }
 
-void Program::gatherTransformFeedbackVaryings(const ProgramMergedVaryings &varyings)
+void Program::gatherTransformFeedbackVaryings(const ProgramMergedVaryings &varyings,
+                                              ShaderType stage)
 {
     // Gather the linked varyings that are used for transform feedback, they should all exist.
     mState.mLinkedTransformFeedbackVaryings.clear();
@@ -4325,9 +4488,14 @@ void Program::gatherTransformFeedbackVaryings(const ProgramMergedVaryings &varyi
         {
             subscript = subscripts.back();
         }
-        for (const auto &ref : varyings)
+        for (const ProgramVaryingRef &ref : varyings)
         {
-            const sh::ShaderVariable *varying = ref.second.get();
+            if (ref.frontShaderStage != stage)
+            {
+                continue;
+            }
+
+            const sh::ShaderVariable *varying = ref.get(stage);
             if (baseName == varying->name)
             {
                 mState.mLinkedTransformFeedbackVaryings.emplace_back(
@@ -4350,25 +4518,113 @@ void Program::gatherTransformFeedbackVaryings(const ProgramMergedVaryings &varyi
 
 ProgramMergedVaryings Program::getMergedVaryings() const
 {
+    ASSERT(mState.mAttachedShaders[ShaderType::Compute] == nullptr);
+
+    // Varyings are matched between pairs of consecutive stages, by location if assigned or
+    // by name otherwise.  Note that it's possible for one stage to specify location and the other
+    // not: https://cvs.khronos.org/bugzilla/show_bug.cgi?id=16261
+
+    // Map stages to the previous active stage in the rendering pipeline.  When looking at input
+    // varyings of a stage, this is used to find the stage whose output varyings are being linked
+    // with them.
+    ShaderMap<ShaderType> previousActiveStage;
+
+    // Note that kAllGraphicsShaderTypes is sorted according to the rendering pipeline.
+    ShaderType lastActiveStage = ShaderType::InvalidEnum;
+    for (ShaderType stage : kAllGraphicsShaderTypes)
+    {
+        previousActiveStage[stage] = lastActiveStage;
+        if (mState.mAttachedShaders[stage])
+        {
+            lastActiveStage = stage;
+        }
+    }
+
+    // First, go through output varyings and create two maps (one by name, one by location) for
+    // faster lookup when matching input varyings.
+
+    ShaderMap<std::map<std::string, size_t>> outputVaryingNameToIndex;
+    ShaderMap<std::map<int, size_t>> outputVaryingLocationToIndex;
+
     ProgramMergedVaryings merged;
 
+    // Gather output varyings.
     for (Shader *shader : mState.mAttachedShaders)
     {
-        if (shader)
+        if (!shader)
         {
-            ShaderType shaderType = shader->getType();
-            for (const sh::ShaderVariable &varying : shader->getOutputVaryings())
+            continue;
+        }
+        ShaderType stage = shader->getType();
+
+        for (const sh::ShaderVariable &varying : shader->getOutputVaryings())
+        {
+            merged.push_back({});
+            ProgramVaryingRef *ref = &merged.back();
+
+            ref->frontShader      = &varying;
+            ref->frontShaderStage = stage;
+
+            // Always map by name.  Even if location is provided in this stage, it may not be in the
+            // paired stage.
+            outputVaryingNameToIndex[stage][varying.name] = merged.size() - 1;
+
+            // If location is provided, also keep it in a map by location.
+            if (varying.location != -1)
             {
-                ProgramVaryingRef *ref = &merged[varying.name];
-                ref->frontShader       = &varying;
-                ref->frontShaderStage  = shaderType;
+                outputVaryingLocationToIndex[stage][varying.location] = merged.size() - 1;
             }
-            for (const sh::ShaderVariable &varying : shader->getInputVaryings())
+        }
+    }
+
+    // Gather input varyings, and match them with output varyings of the previous stage.
+    for (Shader *shader : mState.mAttachedShaders)
+    {
+        if (!shader)
+        {
+            continue;
+        }
+        ShaderType stage         = shader->getType();
+        ShaderType previousStage = previousActiveStage[stage];
+
+        for (const sh::ShaderVariable &varying : shader->getInputVaryings())
+        {
+            size_t mergedIndex = merged.size();
+            if (previousStage != ShaderType::InvalidEnum)
             {
-                ProgramVaryingRef *ref = &merged[varying.name];
-                ref->backShader        = &varying;
-                ref->backShaderStage   = shaderType;
+                // If location is provided, see if we can match by location.
+                if (varying.location != -1)
+                {
+                    auto byLocationIter =
+                        outputVaryingLocationToIndex[previousStage].find(varying.location);
+                    if (byLocationIter != outputVaryingLocationToIndex[previousStage].end())
+                    {
+                        mergedIndex = byLocationIter->second;
+                    }
+                }
+
+                // If not found, try to match by name.
+                if (mergedIndex == merged.size())
+                {
+                    auto byNameIter = outputVaryingNameToIndex[previousStage].find(varying.name);
+                    if (byNameIter != outputVaryingNameToIndex[previousStage].end())
+                    {
+                        mergedIndex = byNameIter->second;
+                    }
+                }
             }
+
+            // If no previous stage, or not matched by location or name, create a new entry for it.
+            if (mergedIndex == merged.size())
+            {
+                merged.push_back({});
+                mergedIndex = merged.size() - 1;
+            }
+
+            ProgramVaryingRef *ref = &merged[mergedIndex];
+
+            ref->backShader      = &varying;
+            ref->backShaderStage = stage;
         }
     }
 
@@ -4731,8 +4987,8 @@ void Program::setUniformValuesFromBindingQualifiers()
         const auto &samplerUniform = mState.mUniforms[samplerIndex];
         if (samplerUniform.binding != -1)
         {
-            GLint location = getUniformLocation(samplerUniform.name);
-            ASSERT(location != -1);
+            UniformLocation location = getUniformLocation(samplerUniform.name);
+            ASSERT(location.value != -1);
             std::vector<GLint> boundTextureUnits;
             for (unsigned int elementIndex = 0;
                  elementIndex < samplerUniform.getBasicTypeElementCount(); ++elementIndex)
@@ -4913,12 +5169,12 @@ GLsizei Program::clampUniformCount(const VariableLocation &locationInfo,
 }
 
 template <size_t cols, size_t rows, typename T>
-GLsizei Program::clampMatrixUniformCount(GLint location,
+GLsizei Program::clampMatrixUniformCount(UniformLocation location,
                                          GLsizei count,
                                          GLboolean transpose,
                                          const T *v)
 {
-    const VariableLocation &locationInfo = mState.mUniformLocations[location];
+    const VariableLocation &locationInfo = mState.mUniformLocations[location.value];
 
     if (!transpose)
     {
@@ -4939,7 +5195,7 @@ GLsizei Program::clampMatrixUniformCount(GLint location,
 template <typename DestT>
 void Program::getUniformInternal(const Context *context,
                                  DestT *dataOut,
-                                 GLint location,
+                                 UniformLocation location,
                                  GLenum nativeType,
                                  int components) const
 {
@@ -4948,7 +5204,7 @@ void Program::getUniformInternal(const Context *context,
         case GL_BOOL:
         {
             GLint tempValue[16] = {0};
-            mProgram->getUniformiv(context, location, tempValue);
+            mProgram->getUniformiv(context, location.value, tempValue);
             UniformStateQueryCastLoop<GLboolean>(
                 dataOut, reinterpret_cast<const uint8_t *>(tempValue), components);
             break;
@@ -4956,7 +5212,7 @@ void Program::getUniformInternal(const Context *context,
         case GL_INT:
         {
             GLint tempValue[16] = {0};
-            mProgram->getUniformiv(context, location, tempValue);
+            mProgram->getUniformiv(context, location.value, tempValue);
             UniformStateQueryCastLoop<GLint>(dataOut, reinterpret_cast<const uint8_t *>(tempValue),
                                              components);
             break;
@@ -4964,7 +5220,7 @@ void Program::getUniformInternal(const Context *context,
         case GL_UNSIGNED_INT:
         {
             GLuint tempValue[16] = {0};
-            mProgram->getUniformuiv(context, location, tempValue);
+            mProgram->getUniformuiv(context, location.value, tempValue);
             UniformStateQueryCastLoop<GLuint>(dataOut, reinterpret_cast<const uint8_t *>(tempValue),
                                               components);
             break;
@@ -4972,7 +5228,7 @@ void Program::getUniformInternal(const Context *context,
         case GL_FLOAT:
         {
             GLfloat tempValue[16] = {0};
-            mProgram->getUniformfv(context, location, tempValue);
+            mProgram->getUniformfv(context, location.value, tempValue);
             UniformStateQueryCastLoop<GLfloat>(
                 dataOut, reinterpret_cast<const uint8_t *>(tempValue), components);
             break;
@@ -4995,7 +5251,7 @@ angle::Result Program::syncState(const Context *context)
     return angle::Result::Continue;
 }
 
-void Program::serialize(const Context *context, angle::MemoryBuffer *binaryOut) const
+angle::Result Program::serialize(const Context *context, angle::MemoryBuffer *binaryOut) const
 {
     BinaryOutputStream stream;
 
@@ -5149,6 +5405,9 @@ void Program::serialize(const Context *context, angle::MemoryBuffer *binaryOut) 
     stream.writeInt(static_cast<int>(mState.mDrawBufferTypeMask.to_ulong()));
     stream.writeInt(static_cast<int>(mState.mActiveOutputVariables.to_ulong()));
 
+    stream.writeInt(mState.getDefaultUniformRange().low());
+    stream.writeInt(mState.getDefaultUniformRange().high());
+
     stream.writeInt(mState.getSamplerUniformRange().low());
     stream.writeInt(mState.getSamplerUniformRange().high());
 
@@ -5182,8 +5441,14 @@ void Program::serialize(const Context *context, angle::MemoryBuffer *binaryOut) 
     mProgram->save(context, &stream);
 
     ASSERT(binaryOut);
-    binaryOut->resize(stream.length());
+    if (!binaryOut->resize(stream.length()))
+    {
+        WARN() << "Failed to allocate enough memory to serialize a program. (" << stream.length()
+               << " bytes )";
+        return angle::Result::Incomplete;
+    }
     memcpy(binaryOut->data(), stream.data(), stream.length());
+    return angle::Result::Continue;
 }
 
 angle::Result Program::deserialize(const Context *context,
@@ -5387,6 +5652,10 @@ angle::Result Program::deserialize(const Context *context,
     mState.mDrawBufferTypeMask    = gl::ComponentTypeMask(stream.readInt<uint32_t>());
     mState.mActiveOutputVariables = stream.readInt<gl::DrawBufferMask>();
 
+    unsigned int defaultUniformRangeLow  = stream.readInt<unsigned int>();
+    unsigned int defaultUniformRangeHigh = stream.readInt<unsigned int>();
+    mState.mDefaultUniformRange          = RangeUI(defaultUniformRangeLow, defaultUniformRangeHigh);
+
     unsigned int samplerRangeLow  = stream.readInt<unsigned int>();
     unsigned int samplerRangeHigh = stream.readInt<unsigned int>();
     mState.mSamplerUniformRange   = RangeUI(samplerRangeLow, samplerRangeHigh);
@@ -5438,15 +5707,17 @@ void Program::postResolveLink(const gl::Context *context)
     mState.updateActiveSamplers();
     mState.updateActiveImages();
 
+    setUniformValuesFromBindingQualifiers();
+
     if (context->getExtensions().multiDraw)
     {
-        mState.mDrawIDLocation = getUniformLocation("gl_DrawID");
+        mState.mDrawIDLocation = getUniformLocation("gl_DrawID").value;
     }
 
     if (context->getExtensions().baseVertexBaseInstance)
     {
-        mState.mBaseVertexLocation   = getUniformLocation("gl_BaseVertex");
-        mState.mBaseInstanceLocation = getUniformLocation("gl_BaseInstance");
+        mState.mBaseVertexLocation   = getUniformLocation("gl_BaseVertex").value;
+        mState.mBaseInstanceLocation = getUniformLocation("gl_BaseInstance").value;
     }
 }
 

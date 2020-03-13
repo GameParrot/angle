@@ -140,6 +140,11 @@ bool IsQualcomm(VendorID vendorId)
     return vendorId == kVendorID_Qualcomm;
 }
 
+bool IsGoogle(VendorID vendorId)
+{
+    return vendorId == kVendorID_GOOGLE;
+}
+
 bool IsVeriSilicon(VendorID vendorId)
 {
     return vendorId == kVendorID_VeriSilicon;
@@ -319,5 +324,15 @@ void PrintSystemInfo(const SystemInfo &info)
         std::cout << "Machine Model Version: " << info.machineModelVersion << "\n";
     }
     std::cout << std::endl;
+}
+
+VersionInfo ParseNvidiaDriverVersion(uint32_t version)
+{
+    return {
+        version >> 22,         // major
+        version >> 14 & 0xff,  // minor
+        version >> 6 & 0xff,   // subMinor
+        version & 0x3f         // patch
+    };
 }
 }  // namespace angle

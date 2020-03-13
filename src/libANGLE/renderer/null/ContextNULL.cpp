@@ -68,22 +68,23 @@ ContextNULL::ContextNULL(const gl::State &state,
     ASSERT(mAllocationTracker != nullptr);
 
     mExtensions                        = gl::Extensions();
-    mExtensions.fence                  = true;
+    mExtensions.fenceNV                = true;
+    mExtensions.framebufferBlit        = true;
     mExtensions.instancedArraysANGLE   = true;
     mExtensions.instancedArraysEXT     = true;
-    mExtensions.pixelBufferObject      = true;
-    mExtensions.mapBuffer              = true;
+    mExtensions.pixelBufferObjectNV    = true;
+    mExtensions.mapBufferOES           = true;
     mExtensions.mapBufferRange         = true;
     mExtensions.copyTexture            = true;
     mExtensions.copyCompressedTexture  = true;
     mExtensions.textureRectangle       = true;
     mExtensions.textureUsage           = true;
-    mExtensions.vertexArrayObject      = true;
+    mExtensions.vertexArrayObjectOES   = true;
     mExtensions.debugMarker            = true;
     mExtensions.translatedShaderSource = true;
 
     mExtensions.textureStorage               = true;
-    mExtensions.rgb8rgba8                    = true;
+    mExtensions.rgb8rgba8OES                 = true;
     mExtensions.textureCompressionDXT1       = true;
     mExtensions.textureCompressionDXT3       = true;
     mExtensions.textureCompressionDXT5       = true;
@@ -91,14 +92,14 @@ ContextNULL::ContextNULL(const gl::State &state,
     mExtensions.textureCompressionASTCHDRKHR = true;
     mExtensions.textureCompressionASTCLDRKHR = true;
     mExtensions.textureCompressionASTCOES    = true;
-    mExtensions.compressedETC1RGB8Texture    = true;
+    mExtensions.compressedETC1RGB8TextureOES = true;
     mExtensions.lossyETCDecode               = true;
     mExtensions.geometryShader               = true;
 
-    mExtensions.eglImage                  = true;
-    mExtensions.eglImageExternal          = true;
-    mExtensions.eglImageExternalEssl3     = true;
-    mExtensions.eglStreamConsumerExternal = true;
+    mExtensions.eglImageOES                 = true;
+    mExtensions.eglImageExternalOES         = true;
+    mExtensions.eglImageExternalEssl3OES    = true;
+    mExtensions.eglStreamConsumerExternalNV = true;
 
     const gl::Version maxClientVersion(3, 1);
     mCaps = GenerateMinimumCaps(maxClientVersion, mExtensions);
@@ -317,15 +318,33 @@ std::string ContextNULL::getRendererDescription() const
     return "NULL";
 }
 
-void ContextNULL::insertEventMarker(GLsizei length, const char *marker) {}
+angle::Result ContextNULL::insertEventMarker(GLsizei length, const char *marker)
+{
+    return angle::Result::Continue;
+}
 
-void ContextNULL::pushGroupMarker(GLsizei length, const char *marker) {}
+angle::Result ContextNULL::pushGroupMarker(GLsizei length, const char *marker)
+{
+    return angle::Result::Continue;
+}
 
-void ContextNULL::popGroupMarker() {}
+angle::Result ContextNULL::popGroupMarker()
+{
+    return angle::Result::Continue;
+}
 
-void ContextNULL::pushDebugGroup(GLenum source, GLuint id, const std::string &message) {}
+angle::Result ContextNULL::pushDebugGroup(const gl::Context *context,
+                                          GLenum source,
+                                          GLuint id,
+                                          const std::string &message)
+{
+    return angle::Result::Continue;
+}
 
-void ContextNULL::popDebugGroup() {}
+angle::Result ContextNULL::popDebugGroup(const gl::Context *context)
+{
+    return angle::Result::Continue;
+}
 
 angle::Result ContextNULL::syncState(const gl::Context *context,
                                      const gl::State::DirtyBits &dirtyBits,

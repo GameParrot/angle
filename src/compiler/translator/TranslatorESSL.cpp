@@ -9,7 +9,6 @@
 #include "angle_gl.h"
 #include "compiler/translator/BuiltInFunctionEmulatorGLSL.h"
 #include "compiler/translator/OutputESSL.h"
-#include "compiler/translator/tree_ops/EmulatePrecision.h"
 #include "compiler/translator/tree_ops/RecordConstantPrecision.h"
 
 namespace sh
@@ -47,19 +46,9 @@ bool TranslatorESSL::translate(TIntermBlock *root,
     // like non-preprocessor tokens.
     writePragma(compileOptions);
 
-    bool precisionEmulation =
-        getResources().WEBGL_debug_shader_precision && getPragma().debugShaderPrecision;
-
-    if (precisionEmulation)
-    {
-        EmulatePrecision emulatePrecision(&getSymbolTable());
-        root->traverse(&emulatePrecision);
-        if (!emulatePrecision.updateTree(this, root))
-        {
-            return false;
-        }
-        emulatePrecision.writeEmulationHelpers(sink, shaderVer, SH_ESSL_OUTPUT);
-    }
+    bool precisionEmulation = false;
+    if (!emulatePrecisionIfNeeded(root, sink, &precisionEmulation, SH_ESSL_OUTPUT))
+        return false;
 
     if (!RecordConstantPrecision(this, root, &getSymbolTable()))
     {
@@ -89,6 +78,11 @@ bool TranslatorESSL::translate(TIntermBlock *root,
 
     // Write array bounds clamping emulation if needed.
     getArrayBoundsClamper().OutputClampingFunctionDefinition(sink);
+
+    if (getShaderType() == GL_FRAGMENT_SHADER)
+    {
+        EmitEarlyFragmentTestsGLSL(*this, sink);
+    }
 
     if (getShaderType() == GL_COMPUTE_SHADER)
     {
@@ -150,7 +144,12 @@ void TranslatorESSL::writeExtensionBehavior(ShCompileOptions compileOptions)
             }
             else if (isMultiview)
             {
-                EmitMultiviewGLSL(*this, compileOptions, iter->second, sink);
+                // Only either OVR_multiview OR OVR_multiview2 should be emitted.
+                if ((iter->first != TExtension::OVR_multiview) ||
+                    !IsExtensionEnabled(extBehavior, TExtension::OVR_multiview2))
+                {
+                    EmitMultiviewGLSL(*this, compileOptions, iter->first, iter->second, sink);
+                }
             }
             else if (iter->first == TExtension::EXT_geometry_shader)
             {

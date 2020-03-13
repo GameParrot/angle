@@ -87,7 +87,7 @@ GLsizeiptr TransformFeedbackState::getPrimitivesDrawn() const
 TransformFeedback::TransformFeedback(rx::GLImplFactory *implFactory,
                                      TransformFeedbackID id,
                                      const Caps &caps)
-    : RefCountObject(id),
+    : RefCountObject(implFactory->generateSerial(), id),
       mState(caps.maxTransformFeedbackSeparateAttributes),
       mImplementation(implFactory->createTransformFeedback(mState))
 {
@@ -325,5 +325,10 @@ void TransformFeedback::onBindingChanged(const Context *context, bool bound)
             buffer->onTFBindingChanged(context, bound, true);
         }
     }
+}
+
+const std::vector<OffsetBindingPointer<Buffer>> &TransformFeedback::getIndexedBuffers() const
+{
+    return mState.mIndexedBuffers;
 }
 }  // namespace gl

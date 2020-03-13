@@ -185,6 +185,7 @@ TParseContext::TParseContext(TSymbolTable &symt,
       mFunctionReturnsValue(false),
       mChecksPrecisionErrors(checksPrecErrors),
       mFragmentPrecisionHighOnESSL1(false),
+      mEarlyFragmentTestsSpecified(false),
       mDefaultUniformMatrixPacking(EmpColumnMajor),
       mDefaultUniformBlockStorage(sh::IsWebGLBasedSpec(spec) ? EbsStd140 : EbsShared),
       mDefaultBufferMatrixPacking(EmpColumnMajor),
@@ -1066,6 +1067,35 @@ bool TParseContext::checkArrayElementIsNotArray(const TSourceLoc &line,
     return true;
 }
 
+// Check for array-of-arrays being used as non-allowed shader inputs/outputs.
+bool TParseContext::checkArrayOfArraysInOut(const TSourceLoc &line,
+                                            const TPublicType &elementType,
+                                            const TType &arrayType)
+{
+    if (arrayType.isArrayOfArrays())
+    {
+        if (elementType.qualifier == EvqVertexOut)
+        {
+            error(line, "vertex shader output cannot be an array of arrays",
+                  TType(elementType).getQualifierString());
+            return false;
+        }
+        if (elementType.qualifier == EvqFragmentIn)
+        {
+            error(line, "fragment shader input cannot be an array of arrays",
+                  TType(elementType).getQualifierString());
+            return false;
+        }
+        if (elementType.qualifier == EvqFragmentOut)
+        {
+            error(line, "fragment shader output cannot be an array of arrays",
+                  TType(elementType).getQualifierString());
+            return false;
+        }
+    }
+    return true;
+}
+
 // Check if this qualified element type can be formed into an array. This is only called when array
 // brackets are associated with an identifier in a declaration, like this:
 //   float a[2];
@@ -1358,6 +1388,11 @@ void TParseContext::declarationQualifierErrorCheck(const sh::TQualifier qualifie
     else
     {
         checkYuvIsNotSpecified(location, layoutQualifier.yuv);
+    }
+
+    if (qualifier != EvqFragmentIn)
+    {
+        checkEarlyFragmentTestsIsNotSpecified(location, layoutQualifier.earlyFragmentTests);
     }
 
     // If multiview extension is enabled, "in" qualifier is allowed in the vertex shader in previous
@@ -1733,6 +1768,17 @@ void TParseContext::checkYuvIsNotSpecified(const TSourceLoc &location, bool yuv)
     if (yuv != false)
     {
         error(location, "invalid layout qualifier: only valid on program outputs", "yuv");
+    }
+}
+
+void TParseContext::checkEarlyFragmentTestsIsNotSpecified(const TSourceLoc &location,
+                                                          bool earlyFragmentTests)
+{
+    if (earlyFragmentTests != false)
+    {
+        error(location,
+              "invalid layout qualifier: only valid when used with 'in' in a fragment shader",
+              "early_fragment_tests");
     }
 }
 
@@ -2215,6 +2261,9 @@ TPublicType TParseContext::addFullySpecifiedType(const TTypeQualifierBuilder &ty
 
     checkWorkGroupSizeIsNotSpecified(typeSpecifier.getLine(), returnType.layoutQualifier);
 
+    checkEarlyFragmentTestsIsNotSpecified(typeSpecifier.getLine(),
+                                          returnType.layoutQualifier.earlyFragmentTests);
+
     if (mShaderVersion < 300)
     {
         if (typeSpecifier.isArray())
@@ -2554,6 +2603,8 @@ TIntermDeclaration *TParseContext::parseSingleArrayDeclaration(
 
     TType *arrayType = new TType(elementType);
     arrayType->makeArrays(arraySizes);
+
+    checkArrayOfArraysInOut(indexLocation, elementType, *arrayType);
 
     checkGeometryShaderInputAndSetArraySize(indexLocation, identifier, arrayType);
 
@@ -3067,6 +3118,12 @@ void TParseContext::parseGlobalLayoutQualifier(const TTypeQualifierBuilder &type
     checkStd430IsForShaderStorageBlock(typeQualifier.line, layoutQualifier.blockStorage,
                                        typeQualifier.qualifier);
 
+    if (typeQualifier.qualifier != EvqFragmentIn)
+    {
+        checkEarlyFragmentTestsIsNotSpecified(typeQualifier.line,
+                                              layoutQualifier.earlyFragmentTests);
+    }
+
     if (typeQualifier.qualifier == EvqComputeIn)
     {
         if (mComputeShaderLocalSizeDeclared &&
@@ -3169,6 +3226,27 @@ void TParseContext::parseGlobalLayoutQualifier(const TTypeQualifierBuilder &type
         }
 
         mNumViews = layoutQualifier.numViews;
+    }
+    else if (typeQualifier.qualifier == EvqFragmentIn)
+    {
+        if (mShaderVersion < 310)
+        {
+            error(typeQualifier.line,
+                  "in type qualifier without variable declaration supported in GLSL ES 3.10 only",
+                  "layout");
+            return;
+        }
+
+        if (!layoutQualifier.earlyFragmentTests)
+        {
+            error(typeQualifier.line,
+                  "only early_fragment_tests is allowed as layout qualifier when not declaring a "
+                  "variable",
+                  "layout");
+            return;
+        }
+
+        mEarlyFragmentTestsSpecified = true;
     }
     else
     {
@@ -3713,6 +3791,8 @@ TIntermDeclaration *TParseContext::addInterfaceBlock(
     }
 
     checkYuvIsNotSpecified(typeQualifier.line, typeQualifier.layoutQualifier.yuv);
+    checkEarlyFragmentTestsIsNotSpecified(typeQualifier.line,
+                                          typeQualifier.layoutQualifier.earlyFragmentTests);
 
     TLayoutQualifier blockLayoutQualifier = typeQualifier.layoutQualifier;
     checkLocationIsNotSpecified(typeQualifier.line, blockLayoutQualifier);
@@ -4348,6 +4428,11 @@ TLayoutQualifier TParseContext::parseLayoutQualifier(const ImmutableString &qual
             qualifier.yuv = true;
         }
     }
+    else if (qualifierType == "early_fragment_tests")
+    {
+        checkLayoutQualifierSupported(qualifierTypeLine, qualifierType, 310);
+        qualifier.earlyFragmentTests = true;
+    }
     else if (qualifierType == "rgba32f")
     {
         checkLayoutQualifierSupported(qualifierTypeLine, qualifierType, 310);
@@ -4858,6 +4943,8 @@ TFieldList *TParseContext::addStructDeclaratorList(const TPublicType &typeSpecif
                    typeSpecifier.getBasicType());
 
     checkWorkGroupSizeIsNotSpecified(typeSpecifier.getLine(), typeSpecifier.layoutQualifier);
+    checkEarlyFragmentTestsIsNotSpecified(typeSpecifier.getLine(),
+                                          typeSpecifier.layoutQualifier.earlyFragmentTests);
 
     TFieldList *fieldList = new TFieldList();
 
@@ -5842,9 +5929,13 @@ void TParseContext::checkAtomicMemoryBuiltinFunctions(TIntermAggregate *function
             return;
         }
 
-        while (memNode->getAsBinaryNode())
+        while (memNode->getAsBinaryNode() || memNode->getAsSwizzleNode())
         {
-            memNode = memNode->getAsBinaryNode()->getLeft();
+            // Child 0 is "left" if binary, and the expression being swizzled if swizzle.
+            // Note: we don't need to check that the binary operation is one of EOp*Index*, as any
+            // other operation will result in a temp value which cannot be passed to this
+            // out/inout parameter anyway.
+            memNode = memNode->getChildNode(0)->getAsTyped();
             if (IsBufferOrSharedVariable(memNode))
             {
                 return;
