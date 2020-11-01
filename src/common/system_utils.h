@@ -16,6 +16,7 @@
 
 namespace angle
 {
+std::string GetExecutableName();
 std::string GetExecutablePath();
 std::string GetExecutableDirectory();
 std::string GetHelperExecutableDir();
@@ -27,6 +28,8 @@ bool SetCWD(const char *dirName);
 bool SetEnvironmentVar(const char *variableName, const char *value);
 bool UnsetEnvironmentVar(const char *variableName);
 std::string GetEnvironmentVar(const char *variableName);
+std::string GetEnvironmentVarFromAndroidProperty(const char *variableName,
+                                                 const char *propertyName);
 const char *GetPathSeparatorForEnvironmentVar();
 bool PrependPathToEnvironmentVar(const char *variableName, const char *path);
 bool IsDirectory(const char *filename);
@@ -68,6 +71,7 @@ enum class SearchType
 };
 
 Library *OpenSharedLibrary(const char *libraryName, SearchType searchType);
+Library *OpenSharedLibraryWithExtension(const char *libraryName);
 
 // Returns true if the process is currently being debugged.
 bool IsDebuggerAttached();

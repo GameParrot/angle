@@ -21,6 +21,11 @@ Resource::Resource()
     mUse.init();
 }
 
+Resource::Resource(Resource &&other) : Resource()
+{
+    mUse = std::move(other.mUse);
+}
+
 Resource::~Resource()
 {
     mUse.release();
@@ -29,6 +34,29 @@ Resource::~Resource()
 angle::Result Resource::finishRunningCommands(ContextVk *contextVk)
 {
     return contextVk->finishToSerial(mUse.getSerial());
+}
+
+angle::Result Resource::waitForIdle(ContextVk *contextVk, const char *debugMessage)
+{
+    // If there are pending commands for the resource, flush them.
+    if (usedInRecordedCommands())
+    {
+        ANGLE_TRY(contextVk->flushImpl(nullptr));
+    }
+
+    // Make sure the driver is done with the resource.
+    if (usedInRunningCommands(contextVk->getLastCompletedQueueSerial()))
+    {
+        if (debugMessage)
+        {
+            ANGLE_PERF_WARNING(contextVk->getDebug(), GL_DEBUG_SEVERITY_HIGH, debugMessage);
+        }
+        ANGLE_TRY(finishRunningCommands(contextVk));
+    }
+
+    ASSERT(!isCurrentlyInUse(contextVk->getLastCompletedQueueSerial()));
+
+    return angle::Result::Continue;
 }
 
 // SharedGarbage implementation.
@@ -52,27 +80,42 @@ SharedGarbage &SharedGarbage::operator=(SharedGarbage &&rhs)
     return *this;
 }
 
-bool SharedGarbage::destroyIfComplete(VkDevice device, Serial completedSerial)
+bool SharedGarbage::destroyIfComplete(RendererVk *renderer, Serial completedSerial)
 {
     if (mLifetime.isCurrentlyInUse(completedSerial))
         return false;
 
-    mLifetime.release();
-
     for (GarbageObject &object : mGarbage)
     {
-        object.destroy(device);
+        object.destroy(renderer);
     }
+
+    mLifetime.release();
 
     return true;
 }
 
 // ResourceUseList implementation.
-ResourceUseList::ResourceUseList() = default;
+ResourceUseList::ResourceUseList()
+{
+    constexpr size_t kDefaultResourceUseCount = 4096;
+    mResourceUses.reserve(kDefaultResourceUseCount);
+}
+
+ResourceUseList::ResourceUseList(ResourceUseList &&other)
+{
+    *this = std::move(other);
+}
 
 ResourceUseList::~ResourceUseList()
 {
     ASSERT(mResourceUses.empty());
+}
+
+ResourceUseList &ResourceUseList::operator=(ResourceUseList &&rhs)
+{
+    std::swap(mResourceUses, rhs.mResourceUses);
+    return *this;
 }
 
 void ResourceUseList::releaseResourceUses()

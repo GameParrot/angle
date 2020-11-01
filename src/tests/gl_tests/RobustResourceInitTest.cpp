@@ -291,6 +291,8 @@ class RobustResourceInitTest : public ANGLETest
 
     template <typename ClearFunc>
     void maskedStencilClear(ClearFunc clearFunc);
+
+    void copyTexSubImage2DCustomFBOTest(int offsetX, int offsetY);
 };
 
 class RobustResourceInitTestES3 : public RobustResourceInitTest
@@ -310,8 +312,8 @@ class RobustResourceInitTestES31 : public RobustResourceInitTest
 // it only works on the implemented renderers
 TEST_P(RobustResourceInitTest, ExpectedRendererSupport)
 {
-    bool shouldHaveSupport =
-        IsD3D11() || IsD3D11_FL93() || IsD3D9() || IsOpenGL() || IsOpenGLES() || IsVulkan();
+    bool shouldHaveSupport = IsD3D11() || IsD3D11_FL93() || IsD3D9() || IsOpenGL() ||
+                             IsOpenGLES() || IsVulkan() || IsMetal();
     EXPECT_EQ(shouldHaveSupport, hasGLExtension());
     EXPECT_EQ(shouldHaveSupport, hasEGLExtension());
     EXPECT_EQ(shouldHaveSupport, hasRobustSurfaceInit());
@@ -329,6 +331,30 @@ TEST_P(RobustResourceInitTest, Queries)
 
         EXPECT_GL_TRUE(glIsEnabled(GL_ROBUST_RESOURCE_INITIALIZATION_ANGLE));
         EXPECT_GL_NO_ERROR();
+
+        GLTexture texture;
+        glBindTexture(GL_TEXTURE_2D, texture);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 2, 2, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+
+        // Can't verify the init state after glTexImage2D, the implementation is free to initialize
+        // any time before the resource is read.
+
+        {
+            // Force to uninitialized
+            glTexParameteri(GL_TEXTURE_2D, GL_RESOURCE_INITIALIZED_ANGLE, GL_FALSE);
+
+            GLint initState = 0;
+            glGetTexParameteriv(GL_TEXTURE_2D, GL_RESOURCE_INITIALIZED_ANGLE, &initState);
+            EXPECT_GL_FALSE(initState);
+        }
+        {
+            // Force to initialized
+            glTexParameteri(GL_TEXTURE_2D, GL_RESOURCE_INITIALIZED_ANGLE, GL_TRUE);
+
+            GLint initState = 0;
+            glGetTexParameteriv(GL_TEXTURE_2D, GL_RESOURCE_INITIALIZED_ANGLE, &initState);
+            EXPECT_GL_TRUE(initState);
+        }
     }
     else
     {
@@ -382,6 +408,11 @@ TEST_P(RobustResourceInitTest, BufferData)
     glReadPixels(0, 0, getWindowWidth(), getWindowHeight(), GL_RGBA, GL_UNSIGNED_BYTE,
                  actual.data());
     EXPECT_EQ(expected, actual);
+
+    GLint initState = 0;
+    glBindBuffer(GL_ARRAY_BUFFER, buffer);
+    glGetBufferParameteriv(GL_ARRAY_BUFFER, GL_RESOURCE_INITIALIZED_ANGLE, &initState);
+    EXPECT_GL_TRUE(initState);
 }
 
 // Regression test for passing a zero size init buffer with the extension.
@@ -731,6 +762,48 @@ TEST_P(RobustResourceInitTest, DrawWithTexture)
     checkFramebufferNonZeroPixels(0, 0, 0, 0, GLColor::black);
 }
 
+// Tests that drawing with an uninitialized mipped texture works as expected.
+TEST_P(RobustResourceInitTestES3, DrawWithMippedTexture)
+{
+    ANGLE_SKIP_TEST_IF(!hasGLExtension());
+
+    GLTexture texture;
+    glBindTexture(GL_TEXTURE_2D, texture);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, kWidth, kHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+    glTexImage2D(GL_TEXTURE_2D, 1, GL_RGBA, kWidth / 2, kHeight / 2, 0, GL_RGBA, GL_UNSIGNED_BYTE,
+                 nullptr);
+    glTexImage2D(GL_TEXTURE_2D, 2, GL_RGBA, kWidth / 4, kHeight / 4, 0, GL_RGBA, GL_UNSIGNED_BYTE,
+                 nullptr);
+    glTexImage2D(GL_TEXTURE_2D, 3, GL_RGBA, kWidth / 8, kHeight / 8, 0, GL_RGBA, GL_UNSIGNED_BYTE,
+                 nullptr);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 1);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 3);
+
+    EXPECT_GL_NO_ERROR();
+
+    constexpr char kVS[] =
+        "attribute vec2 position;\n"
+        "varying vec2 texCoord;\n"
+        "void main() {\n"
+        "    gl_Position = vec4(position, 0, 1);\n"
+        "    texCoord = (position * 0.5) + 0.5;\n"
+        "}";
+    constexpr char kFS[] =
+        "precision mediump float;\n"
+        "varying vec2 texCoord;\n"
+        "uniform sampler2D tex;\n"
+        "void main() {\n"
+        "    gl_FragColor = texture2D(tex, texCoord);\n"
+        "}";
+
+    ANGLE_GL_PROGRAM(program, kVS, kFS);
+    drawQuad(program, "position", 0.5f);
+
+    checkFramebufferNonZeroPixels(0, 0, 0, 0, GLColor::black);
+}
+
 // Reading a partially initialized texture (texImage2D) should succeed with all uninitialized bytes
 // set to 0 and initialized bytes untouched.
 TEST_P(RobustResourceInitTest, ReadingPartiallyInitializedTexture)
@@ -929,6 +1002,11 @@ TEST_P(RobustResourceInitTest, Texture)
     glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture, 0);
     checkFramebufferNonZeroPixels(0, 0, 0, 0, GLColor::black);
+
+    GLint initState = 0;
+    glBindTexture(GL_TEXTURE_2D, texture);
+    glGetTexParameteriv(GL_TEXTURE_2D, GL_RESOURCE_INITIALIZED_ANGLE, &initState);
+    EXPECT_GL_TRUE(initState);
 }
 
 // Test that uploading texture data with an unpack state set correctly initializes the texture and
@@ -995,6 +1073,20 @@ void RobustResourceInitTestES3::testIntegerTextureInit(const char *samplerType,
 
     // Blit from the texture to the framebuffer.
     drawQuad(program, "position", 0.5f);
+
+    // Verify both textures have been initialized
+    {
+        GLint initState = 0;
+        glBindTexture(GL_TEXTURE_2D, framebufferTexture);
+        glGetTexParameteriv(GL_TEXTURE_2D, GL_RESOURCE_INITIALIZED_ANGLE, &initState);
+        EXPECT_GL_TRUE(initState);
+    }
+    {
+        GLint initState = 0;
+        glBindTexture(GL_TEXTURE_2D, texture);
+        glGetTexParameteriv(GL_TEXTURE_2D, GL_RESOURCE_INITIALIZED_ANGLE, &initState);
+        EXPECT_GL_TRUE(initState);
+    }
 
     std::array<PixelT, kWidth * kHeight * 4> data;
     glReadPixels(0, 0, kWidth, kHeight, GL_RGBA_INTEGER, type, data.data());
@@ -1135,6 +1227,59 @@ TEST_P(RobustResourceInitTestES3, GenerateMipmap)
     EXPECT_PIXEL_COLOR_EQ(0, 0, GLColor::red);
 
     // Set viewport to resize the texture and draw.
+    glViewport(0, 0, 2, 2);
+    drawQuad(program, "position", 0.5f);
+    ASSERT_GL_NO_ERROR();
+    EXPECT_PIXEL_COLOR_EQ(0, 0, GLColor::transparentBlack);
+}
+
+// Tests creating mipmaps with robust resource init multiple times.
+TEST_P(RobustResourceInitTestES3, GenerateMipmapAfterRedefine)
+{
+    ANGLE_SKIP_TEST_IF(!hasGLExtension());
+
+    constexpr GLint kTextureSize = 16;
+    const std::vector<GLColor> kInitData(kTextureSize * kTextureSize, GLColor::blue);
+
+    // Initialize a 16x16 RGBA8 texture with blue.
+    GLTexture tex;
+    glBindTexture(GL_TEXTURE_2D, tex);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, kTextureSize, kTextureSize, 0, GL_RGBA,
+                 GL_UNSIGNED_BYTE, kInitData.data());
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+
+    std::string shader = GetSimpleTextureFragmentShader("");
+    ANGLE_GL_PROGRAM(program, kSimpleTextureVertexShader, shader.c_str());
+
+    // Generate mipmaps.
+    glGenerateMipmap(GL_TEXTURE_2D);
+    ASSERT_GL_NO_ERROR();
+
+    // Validate a small mip.
+    glClearColor(1, 0, 0, 1);
+    glClear(GL_COLOR_BUFFER_BIT);
+    EXPECT_PIXEL_COLOR_EQ(0, 0, GLColor::red);
+
+    // Set viewport to resize the texture and draw.
+    glViewport(0, 0, 2, 2);
+    drawQuad(program, "position", 0.5f);
+    ASSERT_GL_NO_ERROR();
+    EXPECT_PIXEL_COLOR_EQ(0, 0, GLColor::blue);
+
+    // Redefine mip 0 with no data.
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, kTextureSize, kTextureSize, 0, GL_RGBA,
+                 GL_UNSIGNED_BYTE, nullptr);
+
+    // Generate mipmaps again.  Mip 0 must be cleared before the mipmaps are regenerated.
+    glGenerateMipmap(GL_TEXTURE_2D);
+    EXPECT_GL_NO_ERROR();
+
+    // Validate a small mip.
+    glClearColor(1, 0, 0, 1);
+    glClear(GL_COLOR_BUFFER_BIT);
+    EXPECT_PIXEL_COLOR_EQ(0, 0, GLColor::red);
+
     glViewport(0, 0, 2, 2);
     drawQuad(program, "position", 0.5f);
     ASSERT_GL_NO_ERROR();
@@ -1531,6 +1676,58 @@ TEST_P(RobustResourceInitTest, CopyTexSubImage2D)
     VerifyRGBA8PixelRect<kDestSize>(destInitTest);
 }
 
+void RobustResourceInitTest::copyTexSubImage2DCustomFBOTest(int offsetX, int offsetY)
+{
+    const int texSize = 512;
+    const int fboSize = 16;
+
+    GLTexture texture;
+    glBindTexture(GL_TEXTURE_2D, texture.get());
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, texSize, texSize, 0, GL_RGBA, GL_UNSIGNED_BYTE,
+                 nullptr);
+    ASSERT_GL_NO_ERROR();
+
+    GLRenderbuffer renderbuffer;
+    glBindRenderbuffer(GL_RENDERBUFFER, renderbuffer.get());
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_RGBA4, fboSize, fboSize);
+    ASSERT_GL_NO_ERROR();
+
+    GLFramebuffer framebuffer;
+    glBindFramebuffer(GL_FRAMEBUFFER, framebuffer.get());
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER,
+                              renderbuffer.get());
+    ASSERT_GL_NO_ERROR();
+    ASSERT_GL_FRAMEBUFFER_COMPLETE(GL_FRAMEBUFFER);
+
+    glClearColor(1.0, 0.0, 0.0, 1.0);
+    glClear(GL_COLOR_BUFFER_BIT);
+    ASSERT_GL_NO_ERROR();
+
+    glCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, offsetX, offsetY, texSize, texSize);
+    ASSERT_GL_NO_ERROR();
+
+    GLFramebuffer readbackFBO;
+    glBindFramebuffer(GL_FRAMEBUFFER, readbackFBO.get());
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture.get(), 0);
+    ASSERT_GL_FRAMEBUFFER_COMPLETE(GL_FRAMEBUFFER);
+    checkCustomFramebufferNonZeroPixels(texSize, texSize, -offsetX, -offsetY, fboSize, fboSize,
+                                        GLColor::red);
+}
+
+// Test CopyTexSubImage2D clipped to size of custom FBO, zero x/y source offset.
+TEST_P(RobustResourceInitTest, CopyTexSubImage2DCustomFBOZeroOffsets)
+{
+    ANGLE_SKIP_TEST_IF(!hasGLExtension());
+    copyTexSubImage2DCustomFBOTest(0, 0);
+}
+
+// Test CopyTexSubImage2D clipped to size of custom FBO, negative x/y source offset.
+TEST_P(RobustResourceInitTest, CopyTexSubImage2DCustomFBONegativeOffsets)
+{
+    ANGLE_SKIP_TEST_IF(!hasGLExtension());
+    copyTexSubImage2DCustomFBOTest(-8, -8);
+}
+
 // Tests that calling CopyTexSubImage3D will initialize the source & destination.
 TEST_P(RobustResourceInitTestES3, CopyTexSubImage3D)
 {
@@ -1630,8 +1827,10 @@ TEST_P(RobustResourceInitTestES3, CompressedSubImage)
 {
     ANGLE_SKIP_TEST_IF(!hasGLExtension());
     ANGLE_SKIP_TEST_IF(!IsGLExtensionEnabled("GL_EXT_texture_compression_dxt1"));
-    // http://anglebug.com/4092
-    ANGLE_SKIP_TEST_IF(IsVulkan());
+
+    // http://anglebug.com/4929
+    // Metal doesn't support robust resource init with compressed textures yet.
+    ANGLE_SKIP_TEST_IF(IsMetal());
 
     constexpr int width     = 8;
     constexpr int height    = 8;
@@ -1734,6 +1933,10 @@ TEST_P(RobustResourceInitTest, ClearWithScissor)
     EXPECT_GL_NO_ERROR();
     EXPECT_PIXEL_COLOR_EQ(0, 0, GLColor::red);
     EXPECT_PIXEL_COLOR_EQ(kSize - 1, 0, GLColor::transparentBlack);
+
+    GLint initState = 0;
+    glGetRenderbufferParameteriv(GL_RENDERBUFFER, GL_RESOURCE_INITIALIZED_ANGLE, &initState);
+    EXPECT_GL_TRUE(initState);
 }
 
 // Tests that surfaces are initialized when they are created
@@ -1759,21 +1962,33 @@ TEST_P(RobustResourceInitTest, SurfaceInitializedAfterSwap)
         GLColor::red,
         GLColor::yellow,
     }};
+
+    if (swapBehaviour != EGL_BUFFER_PRESERVED)
+    {
+        checkFramebufferNonZeroPixels(0, 0, 0, 0, GLColor::black);
+    }
+
+    glEnable(GL_SCISSOR_TEST);
+    glScissor(0, 0, 1, 1);
+
     for (size_t i = 0; i < clearColors.size(); i++)
     {
         if (swapBehaviour == EGL_BUFFER_PRESERVED && i > 0)
         {
             EXPECT_PIXEL_COLOR_EQ(0, 0, clearColors[i - 1]);
         }
-        else
-        {
-            checkFramebufferNonZeroPixels(0, 0, 0, 0, GLColor::black);
-        }
 
         angle::Vector4 clearColor = clearColors[i].toNormalizedVector();
         glClearColor(clearColor[0], clearColor[1], clearColor[2], clearColor[3]);
         glClear(GL_COLOR_BUFFER_BIT);
         EXPECT_GL_NO_ERROR();
+
+        if (swapBehaviour != EGL_BUFFER_PRESERVED)
+        {
+            // Only scissored area (0, 0, 1, 1) has clear color.
+            // The rest should be robust initialized.
+            checkFramebufferNonZeroPixels(0, 0, 1, 1, clearColors[i]);
+        }
 
         swapBuffers();
     }
@@ -1783,8 +1998,6 @@ TEST_P(RobustResourceInitTest, SurfaceInitializedAfterSwap)
 TEST_P(RobustResourceInitTestES31, Multisample2DTexture)
 {
     ANGLE_SKIP_TEST_IF(!hasGLExtension());
-    // http://anglebug.com/4092
-    ANGLE_SKIP_TEST_IF(IsVulkan());
 
     GLTexture texture;
     glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, texture);
@@ -1944,10 +2157,63 @@ TEST_P(RobustResourceInitTestES3, InitializeMultisampledDepthRenderbufferAfterCo
     EXPECT_PIXEL_COLOR_EQ(0, 0, GLColor::green);
 }
 
+// Corner case for robust resource init: CopyTexImage to a cube map.
+TEST_P(RobustResourceInitTest, CopyTexImageToOffsetCubeMap)
+{
+    ANGLE_SKIP_TEST_IF(!hasGLExtension());
+
+    constexpr GLuint kSize = 2;
+
+    std::vector<GLColor> redPixels(kSize * kSize, GLColor::red);
+
+    GLTexture srcTex;
+    glBindTexture(GL_TEXTURE_2D, srcTex);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, kSize, kSize, 0, GL_RGBA, GL_UNSIGNED_BYTE,
+                 redPixels.data());
+
+    GLFramebuffer fbo;
+    glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, srcTex, 0);
+
+    ASSERT_GL_NO_ERROR();
+    ASSERT_GL_FRAMEBUFFER_COMPLETE(GL_FRAMEBUFFER);
+    EXPECT_PIXEL_COLOR_EQ(0, 0, GLColor::red);
+
+    GLTexture dstTex;
+    glBindTexture(GL_TEXTURE_CUBE_MAP, dstTex);
+    glCopyTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X, 0, GL_RGBA, 1, 1, kSize, kSize, 0);
+    glCopyTexImage2D(GL_TEXTURE_CUBE_MAP_NEGATIVE_X, 0, GL_RGBA, -1, -1, kSize, kSize, 0);
+    glCopyTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_Y, 0, GL_RGBA, 2, 2, kSize, kSize, 0);
+    glCopyTexImage2D(GL_TEXTURE_CUBE_MAP_NEGATIVE_Y, 0, GL_RGBA, -2, -2, kSize, kSize, 0);
+    glCopyTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_Z, 0, GL_RGBA, 0, 0, kSize, kSize, 0);
+    glCopyTexImage2D(GL_TEXTURE_CUBE_MAP_NEGATIVE_Z, 0, GL_RGBA, 0, 0, kSize, kSize, 0);
+
+    ASSERT_GL_NO_ERROR();
+
+    // Verify the offset attachments.
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_CUBE_MAP_POSITIVE_X,
+                           dstTex, 0);
+    ASSERT_GL_FRAMEBUFFER_COMPLETE(GL_FRAMEBUFFER);
+    EXPECT_PIXEL_COLOR_EQ(0, 0, GLColor::red);
+    EXPECT_PIXEL_COLOR_EQ(1, 0, GLColor::transparentBlack);
+    EXPECT_PIXEL_COLOR_EQ(0, 1, GLColor::transparentBlack);
+    EXPECT_PIXEL_COLOR_EQ(1, 1, GLColor::transparentBlack);
+
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_CUBE_MAP_NEGATIVE_X,
+                           dstTex, 0);
+    ASSERT_GL_FRAMEBUFFER_COMPLETE(GL_FRAMEBUFFER);
+    EXPECT_PIXEL_COLOR_EQ(0, 0, GLColor::transparentBlack);
+    EXPECT_PIXEL_COLOR_EQ(1, 0, GLColor::transparentBlack);
+    EXPECT_PIXEL_COLOR_EQ(0, 1, GLColor::transparentBlack);
+    EXPECT_PIXEL_COLOR_EQ(1, 1, GLColor::red);
+}
+
 ANGLE_INSTANTIATE_TEST_ES2_AND_ES3_AND(RobustResourceInitTest,
                                        WithAllocateNonZeroMemory(ES2_VULKAN()));
 
-ANGLE_INSTANTIATE_TEST_ES3_AND(RobustResourceInitTestES3, WithAllocateNonZeroMemory(ES3_VULKAN()));
+ANGLE_INSTANTIATE_TEST_ES3_AND(RobustResourceInitTestES3,
+                               WithAllocateNonZeroMemory(ES3_VULKAN()),
+                               ES3_METAL());
 
 ANGLE_INSTANTIATE_TEST_ES31_AND(RobustResourceInitTestES31,
                                 WithAllocateNonZeroMemory(ES31_VULKAN()));

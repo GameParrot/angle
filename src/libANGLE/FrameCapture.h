@@ -23,6 +23,8 @@ enum class GLenumGroup;
 
 namespace angle
 {
+
+using ParamData = std::vector<std::vector<uint8_t>>;
 struct ParamCapture : angle::NonCopyable
 {
     ParamCapture();
@@ -36,7 +38,7 @@ struct ParamCapture : angle::NonCopyable
     ParamType type;
     ParamValue value;
     gl::GLenumGroup enumGroup;  // only used for param type GLenum, GLboolean and GLbitfield
-    std::vector<std::vector<uint8_t>> data;
+    ParamData data;
     int arrayClientPointerIndex = -1;
     size_t readBufferSizeBytes  = 0;
 };
@@ -78,11 +80,18 @@ class ParamBuffer final : angle::NonCopyable
 
     const std::vector<ParamCapture> &getParamCaptures() const { return mParamCaptures; }
 
+    // These helpers allow us to track the ID of the buffer that was active when
+    // MapBufferRange was called.  We'll use it during replay to track the
+    // buffer's contents, as they can be modified by the host.
+    void setMappedBufferID(gl::BufferID bufferID) { mMappedBufferID = bufferID; }
+    gl::BufferID getMappedBufferID() const { return mMappedBufferID; }
+
   private:
     std::vector<ParamCapture> mParamCaptures;
     ParamCapture mReturnValueCapture;
     int mClientArrayDataParam = -1;
     size_t mReadBufferSize    = 0;
+    gl::BufferID mMappedBufferID;
 };
 
 struct CallCapture
@@ -170,11 +179,116 @@ class DataCounters final : angle::NonCopyable
     std::map<Counter, int> mData;
 };
 
+constexpr int kStringsNotFound = -1;
+class StringCounters final : angle::NonCopyable
+{
+  public:
+    StringCounters();
+    ~StringCounters();
+
+    int getStringCounter(std::vector<std::string> &str);
+    void setStringCounter(std::vector<std::string> &str, int &counter);
+
+  private:
+    std::map<std::vector<std::string>, int> mStringCounterMap;
+};
+
+class DataTracker final : angle::NonCopyable
+{
+  public:
+    DataTracker();
+    ~DataTracker();
+
+    DataCounters &getCounters() { return mCounters; }
+    StringCounters &getStringCounters() { return mStringCounters; }
+
+  private:
+    DataCounters mCounters;
+    StringCounters mStringCounters;
+};
+
+using BufferSet   = std::set<gl::BufferID>;
+using BufferCalls = std::map<gl::BufferID, std::vector<CallCapture>>;
+
+// true means mapped, false means unmapped
+using BufferMapStatusMap = std::map<gl::BufferID, bool>;
+
+// Helper to track resource changes during the capture
+class ResourceTracker final : angle::NonCopyable
+{
+  public:
+    ResourceTracker();
+    ~ResourceTracker();
+
+    BufferCalls &getBufferRegenCalls() { return mBufferRegenCalls; }
+    BufferCalls &getBufferRestoreCalls() { return mBufferRestoreCalls; }
+    BufferCalls &getBufferMapCalls() { return mBufferMapCalls; }
+    BufferCalls &getBufferUnmapCalls() { return mBufferUnmapCalls; }
+
+    BufferSet &getStartingBuffers() { return mStartingBuffers; }
+    BufferSet &getNewBuffers() { return mNewBuffers; }
+    BufferSet &getBuffersToRegen() { return mBuffersToRegen; }
+    BufferSet &getBuffersToRestore() { return mBuffersToRestore; }
+
+    void setGennedBuffer(gl::BufferID id);
+    void setDeletedBuffer(gl::BufferID id);
+    void setBufferModified(gl::BufferID id);
+    void setBufferMapped(gl::BufferID id);
+    void setBufferUnmapped(gl::BufferID id);
+
+    const bool &getStartingBuffersMappedCurrent(gl::BufferID id)
+    {
+        return mStartingBuffersMappedCurrent[id];
+    }
+    const bool &getStartingBuffersMappedInitial(gl::BufferID id)
+    {
+        return mStartingBuffersMappedInitial[id];
+    }
+    void setStartingBufferMapped(gl::BufferID id, bool mapped)
+    {
+        // Track the current state (which will change throughout the trace)
+        mStartingBuffersMappedCurrent[id] = mapped;
+
+        // And the initial state, to compare during frame loop reset
+        mStartingBuffersMappedInitial[id] = mapped;
+    }
+
+    void onShaderProgramAccess(gl::ShaderProgramID shaderProgramID);
+    uint32_t getMaxShaderPrograms() const { return mMaxShaderPrograms; }
+
+  private:
+    // Buffer regen calls will delete and gen a buffer
+    BufferCalls mBufferRegenCalls;
+    // Buffer restore calls will restore the contents of a buffer
+    BufferCalls mBufferRestoreCalls;
+    // Buffer map calls will map a buffer with correct offset, length, and access flags
+    BufferCalls mBufferMapCalls;
+    // Buffer unmap calls will bind and unmap a given buffer
+    BufferCalls mBufferUnmapCalls;
+
+    // Starting buffers include all the buffers created during setup for MEC
+    BufferSet mStartingBuffers;
+    // New buffers are those generated while capturing
+    BufferSet mNewBuffers;
+    // Buffers to regen are a list of starting buffers that need to be deleted and genned
+    BufferSet mBuffersToRegen;
+    // Buffers to restore include any starting buffers with contents modified during the run
+    BufferSet mBuffersToRestore;
+
+    // Whether a given buffer was mapped at the start of the trace
+    BufferMapStatusMap mStartingBuffersMappedInitial;
+    // The status of buffer mapping throughout the trace, modified with each Map/Unmap call
+    BufferMapStatusMap mStartingBuffersMappedCurrent;
+
+    // Maximum accessed shader program ID.
+    uint32_t mMaxShaderPrograms = 0;
+};
+
 // Used by the CPP replay to filter out unnecessary code.
 using HasResourceTypeMap = angle::PackedEnumBitSet<ResourceIDType>;
 
-// Map of buffing bindings to offset and size used when mapped
-using BufferDataMap = std::map<gl::BufferBinding, std::pair<GLintptr, GLsizeiptr>>;
+// Map of buffer ID to offset and size used when mapped
+using BufferDataMap = std::map<gl::BufferID, std::pair<GLintptr, GLsizeiptr>>;
 
 // A dictionary of sources indexed by shader type.
 using ProgramSources = gl::ShaderMap<std::string>;
@@ -187,6 +301,9 @@ using ProgramSourceMap = std::map<gl::ShaderProgramID, ProgramSources>;
 using TextureLevels       = std::map<GLint, std::vector<uint8_t>>;
 using TextureLevelDataMap = std::map<gl::TextureID, TextureLevels>;
 
+// Map from ContextID to surface dimensions
+using SurfaceDimensions = std::map<gl::ContextID, gl::Extents>;
+
 class FrameCapture final : angle::NonCopyable
 {
   public:
@@ -194,9 +311,26 @@ class FrameCapture final : angle::NonCopyable
     ~FrameCapture();
 
     void captureCall(const gl::Context *context, CallCapture &&call);
+    void checkForCaptureTrigger();
     void onEndFrame(const gl::Context *context);
-    bool enabled() const;
+    void onDestroyContext(const gl::Context *context);
+    void onMakeCurrent(const gl::Context *context, const egl::Surface *drawSurface);
+    bool enabled() const { return mEnabled; }
+
+    bool isCapturing() const;
     void replay(gl::Context *context);
+    uint32_t getFrameCount() const;
+
+    // Returns a frame index starting from "1" as the first frame.
+    uint32_t getReplayFrameIndex() const;
+
+    void trackBufferMapping(CallCapture *call,
+                            gl::BufferID id,
+                            GLintptr offset,
+                            GLsizeiptr length,
+                            bool writable);
+
+    ResourceTracker &getResouceTracker() { return mResourceTracker; }
 
   private:
     void captureClientArraySnapshot(const gl::Context *context,
@@ -207,7 +341,8 @@ class FrameCapture final : angle::NonCopyable
     void captureCompressedTextureData(const gl::Context *context, const CallCapture &call);
 
     void reset();
-    void maybeCaptureClientData(const gl::Context *context, const CallCapture &call);
+    void maybeOverrideEntryPoint(const gl::Context *context, CallCapture &call);
+    void maybeCapturePreCallUpdates(const gl::Context *context, CallCapture &call);
     void maybeCapturePostCallUpdates(const gl::Context *context);
 
     static void ReplayCall(gl::Context *context,
@@ -216,22 +351,63 @@ class FrameCapture final : angle::NonCopyable
 
     std::vector<CallCapture> mSetupCalls;
     std::vector<CallCapture> mFrameCalls;
-    std::vector<CallCapture> mTearDownCalls;
 
-    bool mEnabled;
+    // We save one large buffer of binary data for the whole CPP replay.
+    // This simplifies a lot of file management.
+    std::vector<uint8_t> mBinaryData;
+
+    bool mEnabled = false;
+    bool mSerializeStateEnabled;
     std::string mOutDirectory;
     std::string mCaptureLabel;
+    bool mCompression;
     gl::AttribArray<int> mClientVertexArrayMap;
     uint32_t mFrameIndex;
-    uint32_t mFrameStart;
-    uint32_t mFrameEnd;
+    uint32_t mCaptureStartFrame;
+    uint32_t mCaptureEndFrame;
+    bool mIsFirstFrame   = true;
+    bool mWroteIndexFile = false;
+    SurfaceDimensions mDrawSurfaceDimensions;
     gl::AttribArray<size_t> mClientArraySizes;
     size_t mReadBufferSize;
     HasResourceTypeMap mHasResourceType;
     BufferDataMap mBufferDataMap;
 
+    ResourceTracker mResourceTracker;
+
+    // If you don't know which frame you want to start capturing at, use the capture trigger.
+    // Initialize it to the number of frames you want to capture, and then clear the value to 0 when
+    // you reach the content you want to capture. Currently only available on Android.
+    uint32_t mCaptureTrigger;
+};
+
+// Shared class for any items that need to be tracked by FrameCapture across shared contexts
+class FrameCaptureShared final : angle::NonCopyable
+{
+  public:
+    FrameCaptureShared();
+    ~FrameCaptureShared();
+
+    const std::string &getShaderSource(gl::ShaderProgramID id) const;
+    void setShaderSource(gl::ShaderProgramID id, std::string sources);
+
+    const ProgramSources &getProgramSources(gl::ShaderProgramID id) const;
+    void setProgramSources(gl::ShaderProgramID id, ProgramSources sources);
+
+    // Load data from a previously stored texture level
+    const std::vector<uint8_t> &retrieveCachedTextureLevel(gl::TextureID id, GLint level);
+
+    // Create the location that should be used to cache texture level data
+    std::vector<uint8_t> &getTextureLevelCacheLocation(gl::Texture *texture,
+                                                       gl::TextureTarget target,
+                                                       GLint level);
+
+    // Remove any cached texture levels on deletion
+    void deleteCachedTextureLevelData(gl::TextureID id);
+
+  private:
     // Cache most recently compiled and linked sources.
-    ShaderSourceMap mCachedShaderSources;
+    ShaderSourceMap mCachedShaderSource;
     ProgramSourceMap mCachedProgramSources;
 
     // Cache a shadow copy of texture level data
@@ -246,10 +422,14 @@ void CaptureCallToFrameCapture(CaptureFuncT captureFunc,
                                ArgsT... captureParams)
 {
     FrameCapture *frameCapture = context->getFrameCapture();
-    if (!frameCapture->enabled())
+    if (!frameCapture->isCapturing())
         return;
 
     CallCapture call = captureFunc(context->getState(), isCallValid, captureParams...);
+
+    if (!isCallValid)
+        INFO() << "FrameCapture: Capturing invalid call to " << GetEntryPointName(call.entryPoint);
+
     frameCapture->captureCall(context, std::move(call));
 }
 
@@ -278,14 +458,29 @@ std::ostream &operator<<(std::ostream &os, const ParamCapture &capture);
 // Pointer capture helpers.
 void CaptureMemory(const void *source, size_t size, ParamCapture *paramCapture);
 void CaptureString(const GLchar *str, ParamCapture *paramCapture);
+void CaptureStringLimit(const GLchar *str, uint32_t limit, ParamCapture *paramCapture);
 
-gl::Program *GetLinkedProgramForCapture(const gl::State &glState, gl::ShaderProgramID handle);
+gl::Program *GetProgramForCapture(const gl::State &glState, gl::ShaderProgramID handle);
 
 // For GetIntegerv, GetFloatv, etc.
 void CaptureGetParameter(const gl::State &glState,
                          GLenum pname,
                          size_t typeSize,
                          ParamCapture *paramCapture);
+
+void CaptureGetActiveUniformBlockivParameters(const gl::State &glState,
+                                              gl::ShaderProgramID handle,
+                                              GLuint uniformBlockIndex,
+                                              GLenum pname,
+                                              ParamCapture *paramCapture);
+
+template <typename T>
+void CaptureClearBufferValue(GLenum buffer, const T *value, ParamCapture *paramCapture)
+{
+    // Per the spec, color buffers have a vec4, the rest a single value
+    uint32_t valueSize = (buffer == GL_COLOR) ? 4 : 1;
+    CaptureMemory(value, valueSize * sizeof(T), paramCapture);
+}
 
 void CaptureGenHandlesImpl(GLsizei n, GLuint *handles, ParamCapture *paramCapture);
 
@@ -339,11 +534,6 @@ void WriteParamValueReplay<ParamType::TMemoryObjectID>(std::ostream &os,
                                                        gl::MemoryObjectID value);
 
 template <>
-void WriteParamValueReplay<ParamType::TPathID>(std::ostream &os,
-                                               const CallCapture &call,
-                                               gl::PathID value);
-
-template <>
 void WriteParamValueReplay<ParamType::TProgramPipelineID>(std::ostream &os,
                                                           const CallCapture &call,
                                                           gl::ProgramPipelineID value);
@@ -393,6 +583,11 @@ void WriteParamValueReplay<ParamType::TUniformLocation>(std::ostream &os,
                                                         const CallCapture &call,
                                                         gl::UniformLocation value);
 
+template <>
+void WriteParamValueReplay<ParamType::TGLsync>(std::ostream &os,
+                                               const CallCapture &call,
+                                               GLsync value);
+
 // General fallback for any unspecific type.
 template <ParamType ParamT, typename T>
 void WriteParamValueReplay(std::ostream &os, const CallCapture &call, T value)
@@ -400,5 +595,20 @@ void WriteParamValueReplay(std::ostream &os, const CallCapture &call, T value)
     os << value;
 }
 }  // namespace angle
+
+template <typename T>
+void CaptureTextureAndSamplerParameter_params(GLenum pname,
+                                              const T *param,
+                                              angle::ParamCapture *paramCapture)
+{
+    if (pname == GL_TEXTURE_BORDER_COLOR)
+    {
+        CaptureMemory(param, sizeof(T) * 4, paramCapture);
+    }
+    else
+    {
+        CaptureMemory(param, sizeof(T), paramCapture);
+    }
+}
 
 #endif  // LIBANGLE_FRAME_CAPTURE_H_

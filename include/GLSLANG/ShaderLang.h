@@ -26,7 +26,7 @@
 
 // Version number for shader translation API.
 // It is incremented every time the API changes.
-#define ANGLE_SH_VERSION 225
+#define ANGLE_SH_VERSION 236
 
 enum ShShaderSpec
 {
@@ -336,6 +336,12 @@ const ShCompileOptions SH_REWRITE_ROW_MAJOR_MATRICES = UINT64_C(1) << 53;
 // Drop any explicit precision qualifiers from shader.
 const ShCompileOptions SH_IGNORE_PRECISION_QUALIFIERS = UINT64_C(1) << 54;
 
+// Allow compiler to do early fragment tests as an optimization.
+const ShCompileOptions SH_EARLY_FRAGMENT_TESTS_OPTIMIZATION = UINT64_C(1) << 55;
+
+// Allow compiler to insert Android pre-rotation code.
+const ShCompileOptions SH_ADD_PRE_ROTATION = UINT64_C(1) << 56;
+
 // Defines alternate strategies for implementing array index clamping.
 enum ShArrayIndexClampingStrategy
 {
@@ -380,20 +386,28 @@ struct ShBuiltInResources
     int WEBGL_debug_shader_precision;
     int EXT_shader_framebuffer_fetch;
     int NV_shader_framebuffer_fetch;
+    int NV_shader_noperspective_interpolation;
     int ARM_shader_framebuffer_fetch;
     int OVR_multiview;
     int OVR_multiview2;
     int EXT_multisampled_render_to_texture;
+    int EXT_multisampled_render_to_texture2;
     int EXT_YUV_target;
     int EXT_geometry_shader;
     int EXT_gpu_shader5;
+    int EXT_shader_non_constant_global_initializers;
     int OES_texture_storage_multisample_2d_array;
     int OES_texture_3D;
     int ANGLE_texture_multisample;
     int ANGLE_multi_draw;
     int ANGLE_base_vertex_base_instance;
     int WEBGL_video_texture;
-
+    int APPLE_clip_distance;
+    int OES_texture_cube_map_array;
+    int EXT_texture_cube_map_array;
+    int EXT_shadow_samplers;
+    int OES_shader_multisample_interpolation;
+    int OES_shader_image_atomic;
     // Set to 1 to enable replacing GL_EXT_draw_buffers #extension directives
     // with GL_NV_draw_buffers in ESSL output. This flag can be used to emulate
     // EXT_draw_buffers by using it in combination with GLES3.0 glDrawBuffers
@@ -534,6 +548,9 @@ struct ShBuiltInResources
 
     // Subpixel bits used in rasterization.
     int SubPixelBits;
+
+    // APPLE_clip_distance/EXT_clip_cull_distance constant
+    int MaxClipDistances;
 };
 
 //
@@ -663,6 +680,8 @@ sh::WorkGroupSize GetComputeShaderLocalGroupSize(const ShHandle handle);
 // Returns the number of views specified through the num_views layout qualifier. If num_views is
 // not set, the function returns -1.
 int GetVertexShaderNumViews(const ShHandle handle);
+// Returns true if compiler has injected instructions for early fragment tests as an optimization
+bool HasEarlyFragmentTestsOptimization(const ShHandle handle);
 
 // Returns true if the passed in variables pack in maxVectors followingthe packing rules from the
 // GLSL 1.017 spec, Appendix A, section 7.
@@ -777,6 +796,15 @@ extern const char kAtomicCountersBlockName[];
 extern const char kLineRasterEmulationPosition[];
 
 }  // namespace vk
+
+namespace mtl
+{
+// Specialization constant to enable GL_SAMPLE_COVERAGE_VALUE emulation.
+extern const char kCoverageMaskEnabledConstName[];
+
+// Specialization constant to emulate rasterizer discard.
+extern const char kRasterizerDiscardEnabledConstName[];
+}  // namespace mtl
 }  // namespace sh
 
 #endif  // GLSLANG_SHADERLANG_H_

@@ -9,10 +9,14 @@
 
 #include "ANGLETest.h"
 
+#include <algorithm>
+#include <cstdlib>
+
 #include "common/platform.h"
 #include "gpu_info_util/SystemInfo.h"
 #include "util/EGLWindow.h"
 #include "util/OSWindow.h"
+#include "util/random_utils.h"
 #include "util/test_utils.h"
 
 #if defined(ANGLE_PLATFORM_WINDOWS)
@@ -165,8 +169,14 @@ const char *GetColorName(GLColor color)
     return nullptr;
 }
 
+// Always re-use displays when using --bot-mode in the test runner.
+bool gReuseDisplays = false;
+
 bool ShouldAlwaysForceNewDisplay()
 {
+    if (gReuseDisplays)
+        return false;
+
     // We prefer to reuse config displays. This is faster and solves a driver issue where creating
     // many displays causes crashes. However this exposes other driver bugs on many other platforms.
     // Conservatively enable the feature only on Windows Intel and NVIDIA for now.
@@ -221,6 +231,12 @@ Vector4 GLColor::toNormalizedVector() const
     return Vector4(ColorNorm(R), ColorNorm(G), ColorNorm(B), ColorNorm(A));
 }
 
+GLColor RandomColor(angle::RNG *rng)
+{
+    return GLColor(rng->randomIntBetween(0, 255), rng->randomIntBetween(0, 255),
+                   rng->randomIntBetween(0, 255), rng->randomIntBetween(0, 255));
+}
+
 GLColor ReadColor(GLint x, GLint y)
 {
     GLColor actual;
@@ -272,11 +288,11 @@ GLColor32F ReadColor32F(GLint x, GLint y)
     return actual;
 }
 
-void LoadEntryPointsWithUtilLoader()
+void LoadEntryPointsWithUtilLoader(angle::GLESDriverType driverType)
 {
 #if defined(ANGLE_USE_UTIL_LOADER)
     PFNEGLGETPROCADDRESSPROC getProcAddress;
-    ANGLETestEnvironment::GetEGLLibrary()->getAs("eglGetProcAddress", &getProcAddress);
+    ANGLETestEnvironment::GetDriverLibrary(driverType)->getAs("eglGetProcAddress", &getProcAddress);
     ASSERT_NE(nullptr, getProcAddress);
 
     LoadEGL(getProcAddress);
@@ -296,53 +312,19 @@ TestPlatformContext gPlatformContext;
 // After a fixed number of iterations we reset the test window. This works around some driver bugs.
 constexpr uint32_t kWindowReuseLimit = 50;
 
-constexpr char kUseConfig[]                = "--use-config=";
-constexpr char kSeparateProcessPerConfig[] = "--separate-process-per-config";
+constexpr char kUseConfig[]                      = "--use-config=";
+constexpr char kReuseDisplays[]                  = "--reuse-displays";
+constexpr char kEnableANGLEPerTestCaptureLabel[] = "--angle-per-test-capture-label";
+constexpr char kBatchId[]                        = "--batch-id=";
 
-bool RunSeparateProcessesForEachConfig(int *argc, char *argv[])
+void SetupEnvironmentVarsForCaptureReplay()
 {
-    std::vector<const char *> commonArgs;
-    for (int argIndex = 0; argIndex < *argc; ++argIndex)
-    {
-        if (strncmp(argv[argIndex], kSeparateProcessPerConfig, strlen(kSeparateProcessPerConfig)) !=
-            0)
-        {
-            commonArgs.push_back(argv[argIndex]);
-        }
-    }
-
-    // Force GoogleTest init now so that we hit the test config init in angle_test_instantiate.cpp.
-    // After instantiation is finished we can gather a full list of enabled configs. Then we can
-    // iterate the list of configs to spawn a child process for each enabled config.
-    testing::InitGoogleTest(argc, argv);
-
-    std::vector<std::string> configNames = GetAvailableTestPlatformNames();
-
-    bool success = true;
-
-    for (const std::string &config : configNames)
-    {
-        std::stringstream strstr;
-        strstr << kUseConfig << config;
-
-        std::string configStr = strstr.str();
-
-        std::vector<const char *> childArgs = commonArgs;
-        childArgs.push_back(configStr.c_str());
-
-        ProcessHandle process(childArgs, false, false);
-        if (!process->started() || !process->finish())
-        {
-            std::cerr << "Launching child config " << config << " failed.\n";
-        }
-        else if (process->getExitCode() != 0)
-        {
-            std::cerr << "Child config " << config << " failed with exit code "
-                      << process->getExitCode() << ".\n";
-            success = false;
-        }
-    }
-    return success;
+    const ::testing::TestInfo *const testInfo =
+        ::testing::UnitTest::GetInstance()->current_test_info();
+    std::string testName = std::string{testInfo->name()};
+    std::replace(testName.begin(), testName.end(), '/', '_');
+    SetEnvironmentVar("ANGLE_CAPTURE_LABEL",
+                      (std::string{testInfo->test_case_name()} + "_" + testName).c_str());
 }
 }  // anonymous namespace
 
@@ -384,10 +366,13 @@ ANGLETestBase::ANGLETestBase(const PlatformParameters &params)
     PlatformParameters withMethods            = params;
     withMethods.eglParameters.platformMethods = &gDefaultPlatformMethods;
 
-    // We don't build vulkan debug layers on Mac (http://anglebug.com/4376)
-    if (IsOSX() && withMethods.getRenderer() == EGL_PLATFORM_ANGLE_TYPE_VULKAN_ANGLE)
+    if (withMethods.getRenderer() == EGL_PLATFORM_ANGLE_TYPE_VULKAN_ANGLE)
     {
+#if defined(ANGLE_ENABLE_VULKAN_VALIDATION_LAYERS)
+        withMethods.eglParameters.debugLayersEnabled = true;
+#else
         withMethods.eglParameters.debugLayersEnabled = false;
+#endif
     }
 
     auto iter = gFixtures.find(withMethods);
@@ -420,37 +405,43 @@ void ANGLETestBase::initOSWindow()
     windowNameStream << "ANGLE Tests - " << *mCurrentParams;
     std::string windowName = windowNameStream.str();
 
-    if (mAlwaysForceNewDisplay)
+    if (IsAndroid())
     {
+        // Only one window per test application on Android, shared among all fixtures
         mFixture->osWindow = mOSWindowSingleton;
     }
 
     if (!mFixture->osWindow)
     {
         mFixture->osWindow = OSWindow::New();
+        mFixture->osWindow->disableErrorMessageDialog();
         if (!mFixture->osWindow->initialize(windowName.c_str(), 128, 128))
         {
-            std::cerr << "Failed to initialize OS Window.";
+            std::cerr << "Failed to initialize OS Window.\n";
         }
 
-        mOSWindowSingleton = mFixture->osWindow;
+        if (IsAndroid())
+        {
+            // Initialize the single window on Andoird only once
+            mOSWindowSingleton = mFixture->osWindow;
+        }
+    }
+
+    if (!mFixture->osWindow->valid())
+    {
+        return;
     }
 
     // On Linux we must keep the test windows visible. On Windows it doesn't seem to need it.
-    mFixture->osWindow->setVisible(!IsWindows());
+    setWindowVisible(getOSWindow(), !IsWindows());
 
     switch (mCurrentParams->driver)
     {
         case GLESDriverType::AngleEGL:
+        case GLESDriverType::SystemEGL:
         {
             mFixture->eglWindow =
                 EGLWindow::New(mCurrentParams->majorVersion, mCurrentParams->minorVersion);
-            break;
-        }
-
-        case GLESDriverType::SystemEGL:
-        {
-            std::cerr << "Unsupported driver." << std::endl;
             break;
         }
 
@@ -524,22 +515,55 @@ void ANGLETestBase::ANGLETestSetUp()
 
     if (mCurrentParams->noFixture)
     {
-        LoadEntryPointsWithUtilLoader();
+        LoadEntryPointsWithUtilLoader(mCurrentParams->driver);
+        return;
+    }
+
+    if (mLastLoadedDriver.valid() && mCurrentParams->driver != mLastLoadedDriver.value())
+    {
+        LoadEntryPointsWithUtilLoader(mCurrentParams->driver);
+        mLastLoadedDriver = mCurrentParams->driver;
+    }
+
+    if (gEnableANGLEPerTestCaptureLabel)
+    {
+        SetupEnvironmentVarsForCaptureReplay();
+    }
+
+    if (!mFixture->osWindow->valid())
+    {
         return;
     }
 
     // Resize the window before creating the context so that the first make current
     // sets the viewport and scissor box to the right size.
     bool needSwap = false;
-    if (mFixture->osWindow->getWidth() != mWidth || mFixture->osWindow->getHeight() != mHeight)
+
+    int osWindowWidth  = mFixture->osWindow->getWidth();
+    int osWindowHeight = mFixture->osWindow->getHeight();
+
+    const bool isRotated = mCurrentParams->eglParameters.emulatedPrerotation == 90 ||
+                           mCurrentParams->eglParameters.emulatedPrerotation == 270;
+    if (isRotated)
     {
-        if (!mFixture->osWindow->resize(mWidth, mHeight))
+        std::swap(osWindowWidth, osWindowHeight);
+    }
+
+    if (osWindowWidth != mWidth || osWindowHeight != mHeight)
+    {
+        int newWindowWidth  = mWidth;
+        int newWindowHeight = mHeight;
+        if (isRotated)
+        {
+            std::swap(newWindowWidth, newWindowHeight);
+        }
+
+        if (!mFixture->osWindow->resize(newWindowWidth, newWindowHeight))
         {
             FAIL() << "Failed to resize ANGLE test window.";
         }
         needSwap = true;
     }
-
     // WGL tests are currently disabled.
     if (mFixture->wglWindow)
     {
@@ -547,11 +571,13 @@ void ANGLETestBase::ANGLETestSetUp()
     }
     else
     {
+        Library *driverLib = ANGLETestEnvironment::GetDriverLibrary(mCurrentParams->driver);
+
         if (mForceNewDisplay || !mFixture->eglWindow->isDisplayInitialized())
         {
             mFixture->eglWindow->destroyGL();
-            if (!mFixture->eglWindow->initializeDisplay(mFixture->osWindow,
-                                                        ANGLETestEnvironment::GetEGLLibrary(),
+            if (!mFixture->eglWindow->initializeDisplay(mFixture->osWindow, driverLib,
+                                                        mCurrentParams->driver,
                                                         mCurrentParams->eglParameters))
             {
                 FAIL() << "EGL Display init failed.";
@@ -562,8 +588,8 @@ void ANGLETestBase::ANGLETestSetUp()
             FAIL() << "Internal parameter conflict error.";
         }
 
-        if (!mFixture->eglWindow->initializeSurface(
-                mFixture->osWindow, ANGLETestEnvironment::GetEGLLibrary(), mFixture->configParams))
+        if (!mFixture->eglWindow->initializeSurface(mFixture->osWindow, driverLib,
+                                                    mFixture->configParams))
         {
             FAIL() << "egl surface init failed.";
         }
@@ -599,7 +625,7 @@ void ANGLETestBase::ANGLETestTearDown()
         WriteDebugMessage("Exiting %s.%s\n", info->test_case_name(), info->name());
     }
 
-    if (mCurrentParams->noFixture)
+    if (mCurrentParams->noFixture || !mFixture->osWindow->valid())
     {
         return;
     }
@@ -1221,14 +1247,20 @@ int ANGLETestBase::getWindowHeight() const
     return mHeight;
 }
 
-bool ANGLETestBase::isMultisampleEnabled() const
+bool ANGLETestBase::isEmulatedPrerotation() const
 {
-    return mFixture->eglWindow->isMultisample();
+    return mCurrentParams->eglParameters.emulatedPrerotation != 0;
 }
 
-void ANGLETestBase::setWindowVisible(bool isVisible)
+void ANGLETestBase::setWindowVisible(OSWindow *osWindow, bool isVisible)
 {
-    mFixture->osWindow->setVisible(isVisible);
+    // SwiftShader windows are not required to be visible for test correctness,
+    // moreover, making a SwiftShader window visible flaky hangs on Xvfb, so we keep them hidden.
+    if (isSwiftshader())
+    {
+        return;
+    }
+    osWindow->setVisible(isVisible);
 }
 
 ANGLETestBase::TestFixture::TestFixture()  = default;
@@ -1268,9 +1300,11 @@ ANGLETestBase::ScopedIgnorePlatformMessages::~ScopedIgnorePlatformMessages()
 OSWindow *ANGLETestBase::mOSWindowSingleton = nullptr;
 std::map<angle::PlatformParameters, ANGLETestBase::TestFixture> ANGLETestBase::gFixtures;
 Optional<EGLint> ANGLETestBase::mLastRendererType;
+Optional<angle::GLESDriverType> ANGLETestBase::mLastLoadedDriver;
 
-std::unique_ptr<Library> ANGLETestEnvironment::gEGLLibrary;
-std::unique_ptr<Library> ANGLETestEnvironment::gWGLLibrary;
+std::unique_ptr<Library> ANGLETestEnvironment::gAngleEGLLibrary;
+std::unique_ptr<Library> ANGLETestEnvironment::gSystemEGLLibrary;
+std::unique_ptr<Library> ANGLETestEnvironment::gSystemWGLLibrary;
 
 void ANGLETestEnvironment::SetUp() {}
 
@@ -1279,26 +1313,58 @@ void ANGLETestEnvironment::TearDown()
     ANGLETestBase::ReleaseFixtures();
 }
 
-Library *ANGLETestEnvironment::GetEGLLibrary()
+// static
+Library *ANGLETestEnvironment::GetDriverLibrary(angle::GLESDriverType driver)
 {
-#if defined(ANGLE_USE_UTIL_LOADER)
-    if (!gEGLLibrary)
+    switch (driver)
     {
-        gEGLLibrary.reset(OpenSharedLibrary(ANGLE_EGL_LIBRARY_NAME, SearchType::ApplicationDir));
+        case angle::GLESDriverType::AngleEGL:
+            return GetAngleEGLLibrary();
+        case angle::GLESDriverType::SystemEGL:
+            return GetSystemEGLLibrary();
+        case angle::GLESDriverType::SystemWGL:
+            return GetSystemWGLLibrary();
+        default:
+            return nullptr;
     }
-#endif  // defined(ANGLE_USE_UTIL_LOADER)
-    return gEGLLibrary.get();
 }
 
-Library *ANGLETestEnvironment::GetWGLLibrary()
+// static
+Library *ANGLETestEnvironment::GetAngleEGLLibrary()
+{
+#if defined(ANGLE_USE_UTIL_LOADER)
+    if (!gAngleEGLLibrary)
+    {
+        gAngleEGLLibrary.reset(
+            OpenSharedLibrary(ANGLE_EGL_LIBRARY_NAME, SearchType::ApplicationDir));
+    }
+#endif  // defined(ANGLE_USE_UTIL_LOADER)
+    return gAngleEGLLibrary.get();
+}
+
+// static
+Library *ANGLETestEnvironment::GetSystemEGLLibrary()
+{
+#if defined(ANGLE_USE_UTIL_LOADER)
+    if (!gSystemEGLLibrary)
+    {
+        gSystemEGLLibrary.reset(
+            OpenSharedLibraryWithExtension(GetNativeEGLLibraryNameWithExtension()));
+    }
+#endif  // defined(ANGLE_USE_UTIL_LOADER)
+    return gSystemEGLLibrary.get();
+}
+
+// static
+Library *ANGLETestEnvironment::GetSystemWGLLibrary()
 {
 #if defined(ANGLE_USE_UTIL_LOADER) && defined(ANGLE_PLATFORM_WINDOWS)
-    if (!gWGLLibrary)
+    if (!gSystemWGLLibrary)
     {
-        gWGLLibrary.reset(OpenSharedLibrary("opengl32", SearchType::SystemDir));
+        gSystemWGLLibrary.reset(OpenSharedLibrary("opengl32", SearchType::SystemDir));
     }
 #endif  // defined(ANGLE_USE_UTIL_LOADER) && defined(ANGLE_PLATFORM_WINDOWS)
-    return gWGLLibrary.get();
+    return gSystemWGLLibrary.get();
 }
 
 void ANGLEProcessTestArgs(int *argc, char *argv[])
@@ -1309,31 +1375,21 @@ void ANGLEProcessTestArgs(int *argc, char *argv[])
     {
         if (strncmp(argv[argIndex], kUseConfig, strlen(kUseConfig)) == 0)
         {
-            gSelectedConfig = std::string(argv[argIndex] + strlen(kUseConfig));
+            SetSelectedConfig(argv[argIndex] + strlen(kUseConfig));
         }
-        if (strncmp(argv[argIndex], kSeparateProcessPerConfig, strlen(kSeparateProcessPerConfig)) ==
-            0)
+        else if (strncmp(argv[argIndex], kReuseDisplays, strlen(kReuseDisplays)) == 0)
         {
-            gSeparateProcessPerConfig = true;
+            gReuseDisplays = true;
         }
-    }
-
-    if (gSeparateProcessPerConfig)
-    {
-        if (!gSelectedConfig.empty())
+        else if (strncmp(argv[argIndex], kBatchId, strlen(kBatchId)) == 0)
         {
-            std::cout << "Cannot use both a single test config and separate processes.\n";
-            exit(1);
+            // Enable display reuse when running under --bot-mode.
+            gReuseDisplays = true;
         }
-
-        if (RunSeparateProcessesForEachConfig(argc, argv))
+        else if (strncmp(argv[argIndex], kEnableANGLEPerTestCaptureLabel,
+                         strlen(kEnableANGLEPerTestCaptureLabel)) == 0)
         {
-            exit(0);
-        }
-        else
-        {
-            std::cout << "Some subprocesses failed.\n";
-            exit(1);
+            gEnableANGLEPerTestCaptureLabel = true;
         }
     }
 }

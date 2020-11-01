@@ -69,6 +69,7 @@ class Serial final
 
     // Useful for serialization.
     constexpr uint64_t getValue() const { return mValue; }
+    constexpr bool valid() const { return mValue != kInvalid; }
 
   private:
     template <typename T>
@@ -99,6 +100,7 @@ class SerialFactoryBase final : angle::NonCopyable
 
 using SerialFactory       = SerialFactoryBase<uint64_t>;
 using AtomicSerialFactory = SerialFactoryBase<std::atomic<uint64_t>>;
+
 }  // namespace rx
 
 #endif  // LIBANGLE_RENDERER_SERIAL_UTILS_H_

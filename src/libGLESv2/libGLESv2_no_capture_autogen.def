@@ -480,10 +480,20 @@ EXPORTS
     glGetRenderbufferImageANGLE
     glGetTexImageANGLE
 
+    ; GL_ANGLE_get_tex_level_parameter
+    glGetTexLevelParameterfvANGLE
+    glGetTexLevelParameterivANGLE
+
     ; GL_ANGLE_instanced_arrays
     glDrawArraysInstancedANGLE
     glDrawElementsInstancedANGLE
     glVertexAttribDivisorANGLE
+
+    ; GL_ANGLE_memory_object_flags
+    glTexStorageMemFlags2DANGLE
+    glTexStorageMemFlags2DMultisampleANGLE
+    glTexStorageMemFlags3DANGLE
+    glTexStorageMemFlags3DMultisampleANGLE
 
     ; GL_ANGLE_memory_object_fuchsia
     glImportMemoryZirconHandleANGLE
@@ -578,8 +588,6 @@ EXPORTS
 
     ; GL_ANGLE_texture_multisample
     glGetMultisamplefvANGLE
-    glGetTexLevelParameterfvANGLE
-    glGetTexLevelParameterivANGLE
     glSampleMaskiANGLE
     glTexStorage2DMultisampleANGLE
 
@@ -598,42 +606,23 @@ EXPORTS
 
     ; GL_CHROMIUM_framebuffer_mixed_samples
     glCoverageModulationCHROMIUM
-    glMatrixLoadIdentityCHROMIUM
-    glMatrixLoadfCHROMIUM
 
     ; GL_CHROMIUM_lose_context
     glLoseContextCHROMIUM
 
-    ; GL_CHROMIUM_path_rendering
-    glBindFragmentInputLocationCHROMIUM
-    glCoverFillPathCHROMIUM
-    glCoverFillPathInstancedCHROMIUM
-    glCoverStrokePathCHROMIUM
-    glCoverStrokePathInstancedCHROMIUM
-    glDeletePathsCHROMIUM
-    glGenPathsCHROMIUM
-    glGetPathParameterfvCHROMIUM
-    glGetPathParameterivCHROMIUM
-    glIsPathCHROMIUM
-    glPathCommandsCHROMIUM
-    glPathParameterfCHROMIUM
-    glPathParameteriCHROMIUM
-    glPathStencilFuncCHROMIUM
-    glProgramPathFragmentInputGenCHROMIUM
-    glStencilFillPathCHROMIUM
-    glStencilFillPathInstancedCHROMIUM
-    glStencilStrokePathCHROMIUM
-    glStencilStrokePathInstancedCHROMIUM
-    glStencilThenCoverFillPathCHROMIUM
-    glStencilThenCoverFillPathInstancedCHROMIUM
-    glStencilThenCoverStrokePathCHROMIUM
-    glStencilThenCoverStrokePathInstancedCHROMIUM
+    ; GL_EXT_EGL_image_array
 
     ; GL_EXT_blend_func_extended
     glBindFragDataLocationEXT
     glBindFragDataLocationIndexedEXT
     glGetFragDataIndexEXT
     glGetProgramResourceLocationIndexEXT
+
+    ; GL_EXT_buffer_storage
+    glBufferStorageEXT
+
+    ; GL_EXT_copy_image
+    glCopyImageSubDataEXT
 
     ; GL_EXT_debug_marker
     glInsertEventMarkerEXT
@@ -733,6 +722,10 @@ EXPORTS
     ; GL_EXT_semaphore_fd
     glImportSemaphoreFdEXT
 
+    ; GL_EXT_texture_buffer
+    glTexBufferEXT
+    glTexBufferRangeEXT
+
     ; GL_EXT_texture_compression_bptc
 
     ; GL_EXT_texture_compression_dxt1
@@ -743,9 +736,13 @@ EXPORTS
 
     ; GL_EXT_texture_compression_s3tc_srgb
 
+    ; GL_EXT_texture_cube_map_array
+
     ; GL_EXT_texture_filter_anisotropic
 
     ; GL_EXT_texture_format_BGRA8888
+
+    ; GL_EXT_texture_sRGB_R8
 
     ; GL_EXT_texture_storage
     glTexStorage1DEXT
@@ -782,6 +779,9 @@ EXPORTS
     glEGLImageTargetTexture2DOES
 
     ; GL_OES_compressed_ETC1_RGB8_texture
+
+    ; GL_OES_copy_image
+    glCopyImageSubDataOES
 
     ; GL_OES_depth32
 
@@ -848,6 +848,9 @@ EXPORTS
     ; GL_OES_query_matrix
     glQueryMatrixxOES
 
+    ; GL_OES_sample_shading
+    glMinSampleShadingOES
+
     ; GL_OES_texture_3D
     glCompressedTexImage3DOES
     glCompressedTexSubImage3DOES
@@ -866,6 +869,10 @@ EXPORTS
     glTexParameterIivOES
     glTexParameterIuivOES
 
+    ; GL_OES_texture_buffer
+    glTexBufferOES
+    glTexBufferRangeOES
+
     ; GL_OES_texture_cube_map
     glGetTexGenfvOES
     glGetTexGenivOES
@@ -877,7 +884,11 @@ EXPORTS
     glTexGenxOES
     glTexGenxvOES
 
+    ; GL_OES_texture_cube_map_array
+
     ; GL_OES_texture_half_float
+
+    ; GL_OES_texture_stencil8
 
     ; GL_OES_texture_storage_multisample_2d_array
     glTexStorage3DMultisampleOES
@@ -908,7 +919,6 @@ EXPORTS
     glBindBufferRangeContextANGLE
     glBindFragDataLocationEXTContextANGLE
     glBindFragDataLocationIndexedEXTContextANGLE
-    glBindFragmentInputLocationCHROMIUMContextANGLE
     glBindFramebufferContextANGLE
     glBindFramebufferOESContextANGLE
     glBindImageTextureContextANGLE
@@ -943,6 +953,7 @@ EXPORTS
     glBlitFramebufferContextANGLE
     glBlitFramebufferANGLEContextANGLE
     glBufferDataContextANGLE
+    glBufferStorageEXTContextANGLE
     glBufferStorageMemEXTContextANGLE
     glBufferSubDataContextANGLE
     glCheckFramebufferStatusContextANGLE
@@ -983,6 +994,8 @@ EXPORTS
     glCompressedTexSubImage3DRobustANGLEContextANGLE
     glCopyBufferSubDataContextANGLE
     glCopyImageSubDataContextANGLE
+    glCopyImageSubDataEXTContextANGLE
+    glCopyImageSubDataOESContextANGLE
     glCopySubTexture3DANGLEContextANGLE
     glCopySubTextureCHROMIUMContextANGLE
     glCopyTexImage2DContextANGLE
@@ -991,10 +1004,6 @@ EXPORTS
     glCopyTexSubImage3DOESContextANGLE
     glCopyTexture3DANGLEContextANGLE
     glCopyTextureCHROMIUMContextANGLE
-    glCoverFillPathCHROMIUMContextANGLE
-    glCoverFillPathInstancedCHROMIUMContextANGLE
-    glCoverStrokePathCHROMIUMContextANGLE
-    glCoverStrokePathInstancedCHROMIUMContextANGLE
     glCoverageModulationCHROMIUMContextANGLE
     glCreateMemoryObjectsEXTContextANGLE
     glCreateProgramContextANGLE
@@ -1013,7 +1022,6 @@ EXPORTS
     glDeleteFramebuffersContextANGLE
     glDeleteFramebuffersOESContextANGLE
     glDeleteMemoryObjectsEXTContextANGLE
-    glDeletePathsCHROMIUMContextANGLE
     glDeleteProgramContextANGLE
     glDeleteProgramPipelinesContextANGLE
     glDeleteQueriesContextANGLE
@@ -1114,7 +1122,6 @@ EXPORTS
     glGenFencesNVContextANGLE
     glGenFramebuffersContextANGLE
     glGenFramebuffersOESContextANGLE
-    glGenPathsCHROMIUMContextANGLE
     glGenProgramPipelinesContextANGLE
     glGenQueriesContextANGLE
     glGenQueriesEXTContextANGLE
@@ -1188,8 +1195,6 @@ EXPORTS
     glGetObjectLabelKHRContextANGLE
     glGetObjectPtrLabelContextANGLE
     glGetObjectPtrLabelKHRContextANGLE
-    glGetPathParameterfvCHROMIUMContextANGLE
-    glGetPathParameterivCHROMIUMContextANGLE
     glGetPointervContextANGLE
     glGetPointervKHRContextANGLE
     glGetPointervRobustANGLERobustANGLEContextANGLE
@@ -1315,7 +1320,6 @@ EXPORTS
     glIsFramebufferContextANGLE
     glIsFramebufferOESContextANGLE
     glIsMemoryObjectEXTContextANGLE
-    glIsPathCHROMIUMContextANGLE
     glIsProgramContextANGLE
     glIsProgramPipelineContextANGLE
     glIsQueryContextANGLE
@@ -1355,14 +1359,13 @@ EXPORTS
     glMaterialxContextANGLE
     glMaterialxvContextANGLE
     glMatrixIndexPointerOESContextANGLE
-    glMatrixLoadIdentityCHROMIUMContextANGLE
-    glMatrixLoadfCHROMIUMContextANGLE
     glMatrixModeContextANGLE
     glMaxShaderCompilerThreadsKHRContextANGLE
     glMemoryBarrierContextANGLE
     glMemoryBarrierByRegionContextANGLE
     glMemoryObjectParameterivEXTContextANGLE
     glMinSampleShadingContextANGLE
+    glMinSampleShadingOESContextANGLE
     glMultMatrixfContextANGLE
     glMultMatrixxContextANGLE
     glMultiDrawArraysANGLEContextANGLE
@@ -1384,10 +1387,6 @@ EXPORTS
     glOrthofContextANGLE
     glOrthoxContextANGLE
     glPatchParameteriContextANGLE
-    glPathCommandsCHROMIUMContextANGLE
-    glPathParameterfCHROMIUMContextANGLE
-    glPathParameteriCHROMIUMContextANGLE
-    glPathStencilFuncCHROMIUMContextANGLE
     glPauseTransformFeedbackContextANGLE
     glPixelStoreiContextANGLE
     glPointParameterfContextANGLE
@@ -1407,7 +1406,6 @@ EXPORTS
     glProgramBinaryContextANGLE
     glProgramBinaryOESContextANGLE
     glProgramParameteriContextANGLE
-    glProgramPathFragmentInputGenCHROMIUMContextANGLE
     glProgramUniform1fContextANGLE
     glProgramUniform1fvContextANGLE
     glProgramUniform1iContextANGLE
@@ -1489,23 +1487,19 @@ EXPORTS
     glShaderBinaryContextANGLE
     glShaderSourceContextANGLE
     glSignalSemaphoreEXTContextANGLE
-    glStencilFillPathCHROMIUMContextANGLE
-    glStencilFillPathInstancedCHROMIUMContextANGLE
     glStencilFuncContextANGLE
     glStencilFuncSeparateContextANGLE
     glStencilMaskContextANGLE
     glStencilMaskSeparateContextANGLE
     glStencilOpContextANGLE
     glStencilOpSeparateContextANGLE
-    glStencilStrokePathCHROMIUMContextANGLE
-    glStencilStrokePathInstancedCHROMIUMContextANGLE
-    glStencilThenCoverFillPathCHROMIUMContextANGLE
-    glStencilThenCoverFillPathInstancedCHROMIUMContextANGLE
-    glStencilThenCoverStrokePathCHROMIUMContextANGLE
-    glStencilThenCoverStrokePathInstancedCHROMIUMContextANGLE
     glTestFenceNVContextANGLE
     glTexBufferContextANGLE
+    glTexBufferEXTContextANGLE
+    glTexBufferOESContextANGLE
     glTexBufferRangeContextANGLE
+    glTexBufferRangeEXTContextANGLE
+    glTexBufferRangeOESContextANGLE
     glTexCoordPointerContextANGLE
     glTexEnvfContextANGLE
     glTexEnvfvContextANGLE
@@ -1552,6 +1546,10 @@ EXPORTS
     glTexStorageMem2DMultisampleEXTContextANGLE
     glTexStorageMem3DEXTContextANGLE
     glTexStorageMem3DMultisampleEXTContextANGLE
+    glTexStorageMemFlags2DANGLEContextANGLE
+    glTexStorageMemFlags2DMultisampleANGLEContextANGLE
+    glTexStorageMemFlags3DANGLEContextANGLE
+    glTexStorageMemFlags3DMultisampleANGLEContextANGLE
     glTexSubImage2DContextANGLE
     glTexSubImage2DRobustANGLEContextANGLE
     glTexSubImage3DContextANGLE
@@ -1684,6 +1682,9 @@ EXPORTS
     ; EGL_ANDROID_blob_cache
     EGL_SetBlobCacheFuncsANDROID
 
+    ; EGL_ANDROID_create_native_client_buffer
+    EGL_CreateNativeClientBufferANDROID
+
     ; EGL_ANDROID_get_frame_timestamps
     EGL_GetCompositorTimingANDROID
     EGL_GetCompositorTimingSupportedANDROID
@@ -1708,6 +1709,11 @@ EXPORTS
     EGL_QueryDisplayAttribANGLE
     EGL_QueryStringiANGLE
 
+    ; EGL_ANGLE_power_preference
+    EGL_HandleGPUSwitchANGLE
+    EGL_ReacquireHighPowerGPUANGLE
+    EGL_ReleaseHighPowerGPUANGLE
+
     ; EGL_ANGLE_program_cache_control
     EGL_ProgramCacheGetAttribANGLE
     EGL_ProgramCachePopulateANGLE
@@ -1724,8 +1730,10 @@ EXPORTS
     ; EGL_ANGLE_swap_with_frame_token
     EGL_SwapBuffersWithFrameTokenANGLE
 
+    ; EGL_ANGLE_sync_control_rate
+    EGL_GetMscRateANGLE
+
     ; EGL_CHROMIUM_sync_control
-    EGL_GetMscRateCHROMIUM
     EGL_GetSyncValuesCHROMIUM
 
     ; EGL_EXT_device_query
@@ -1752,6 +1760,9 @@ EXPORTS
     ; EGL_KHR_image
     EGL_CreateImageKHR
     EGL_DestroyImageKHR
+
+    ; EGL_KHR_reusable_sync
+    EGL_SignalSyncKHR
 
     ; EGL_KHR_stream
     EGL_CreateStreamKHR

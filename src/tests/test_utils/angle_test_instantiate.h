@@ -28,6 +28,9 @@ bool IsWindows();
 bool IsWindows7();
 bool IsFuchsia();
 
+// CPU architectures
+bool IsARM64();
+
 // Android devices
 bool IsNexus5X();
 bool IsNexus6P();
@@ -40,10 +43,14 @@ bool IsNVIDIAShield();
 // GPU vendors.
 bool IsIntel();
 bool IsAMD();
-bool IsNVIDIA();
 bool IsARM();
-bool IsARM64();
+bool IsNVIDIA();
 
+// GPU devices.
+bool IsSwiftshaderDevice();
+bool IsIntelUHD630Mobile();
+
+// Compiler configs.
 inline bool IsASan()
 {
 #if defined(ANGLE_WITH_ASAN)
@@ -51,6 +58,15 @@ inline bool IsASan()
 #else
     return false;
 #endif  // defined(ANGLE_WITH_ASAN)
+}
+
+inline bool IsTSan()
+{
+#if defined(THREAD_SANITIZER)
+    return true;
+#else
+    return false;
+#endif  // defined(THREAD_SANITIZER)
 }
 
 bool IsPlatformAvailable(const PlatformParameters &param);
@@ -150,9 +166,9 @@ struct CombinedPrintToStringParamName
     INSTANTIATE_TEST_SUITE_P(, testName, ANGLE_INSTANTIATE_TEST_PLATFORMS(testName), \
                              testing::PrintToStringParamName())
 
-#define ANGLE_INSTANTIATE_TEST_ES3_AND(testName, extra)                                  \
-    const PlatformParameters testName##params[] = {ANGLE_ALL_TEST_PLATFORMS_ES3, extra}; \
-    INSTANTIATE_TEST_SUITE_P(, testName, ANGLE_INSTANTIATE_TEST_PLATFORMS(testName),     \
+#define ANGLE_INSTANTIATE_TEST_ES3_AND(testName, ...)                                          \
+    const PlatformParameters testName##params[] = {ANGLE_ALL_TEST_PLATFORMS_ES3, __VA_ARGS__}; \
+    INSTANTIATE_TEST_SUITE_P(, testName, ANGLE_INSTANTIATE_TEST_PLATFORMS(testName),           \
                              testing::PrintToStringParamName())
 
 // Instantiate the test once for each GLES31 platform
@@ -161,9 +177,9 @@ struct CombinedPrintToStringParamName
     INSTANTIATE_TEST_SUITE_P(, testName, ANGLE_INSTANTIATE_TEST_PLATFORMS(testName), \
                              testing::PrintToStringParamName())
 
-#define ANGLE_INSTANTIATE_TEST_ES31_AND(testName, extra)                                  \
-    const PlatformParameters testName##params[] = {ANGLE_ALL_TEST_PLATFORMS_ES31, extra}; \
-    INSTANTIATE_TEST_SUITE_P(, testName, ANGLE_INSTANTIATE_TEST_PLATFORMS(testName),      \
+#define ANGLE_INSTANTIATE_TEST_ES31_AND(testName, ...)                                          \
+    const PlatformParameters testName##params[] = {ANGLE_ALL_TEST_PLATFORMS_ES31, __VA_ARGS__}; \
+    INSTANTIATE_TEST_SUITE_P(, testName, ANGLE_INSTANTIATE_TEST_PLATFORMS(testName),            \
                              testing::PrintToStringParamName())
 
 // Multiple ES Version macros
@@ -173,10 +189,10 @@ struct CombinedPrintToStringParamName
     INSTANTIATE_TEST_SUITE_P(, testName, ANGLE_INSTANTIATE_TEST_PLATFORMS(testName), \
                              testing::PrintToStringParamName())
 
-#define ANGLE_INSTANTIATE_TEST_ES2_AND_ES3_AND(testName, extra)                          \
-    const PlatformParameters testName##params[] = {ANGLE_ALL_TEST_PLATFORMS_ES2,         \
-                                                   ANGLE_ALL_TEST_PLATFORMS_ES3, extra}; \
-    INSTANTIATE_TEST_SUITE_P(, testName, ANGLE_INSTANTIATE_TEST_PLATFORMS(testName),     \
+#define ANGLE_INSTANTIATE_TEST_ES2_AND_ES3_AND(testName, ...)                                  \
+    const PlatformParameters testName##params[] = {ANGLE_ALL_TEST_PLATFORMS_ES2,               \
+                                                   ANGLE_ALL_TEST_PLATFORMS_ES3, __VA_ARGS__}; \
+    INSTANTIATE_TEST_SUITE_P(, testName, ANGLE_INSTANTIATE_TEST_PLATFORMS(testName),           \
                              testing::PrintToStringParamName())
 
 #define ANGLE_INSTANTIATE_TEST_ES2_AND_ES3_AND_ES31(testName)                        \
@@ -199,10 +215,20 @@ struct CombinedPrintToStringParamName
     INSTANTIATE_TEST_SUITE_P(, testName, ANGLE_INSTANTIATE_TEST_PLATFORMS(testName), \
                              testing::PrintToStringParamName())
 
+#define ANGLE_INSTANTIATE_TEST_ES3_AND_ES31_AND(testName, ...)                                  \
+    const PlatformParameters testName##params[] = {ANGLE_ALL_TEST_PLATFORMS_ES3,                \
+                                                   ANGLE_ALL_TEST_PLATFORMS_ES31, __VA_ARGS__}; \
+    INSTANTIATE_TEST_SUITE_P(, testName, ANGLE_INSTANTIATE_TEST_PLATFORMS(testName),            \
+                             testing::PrintToStringParamName())
+
 // Instantiate the test for a combination of N parameters and the
 // enumeration of platforms in the extra args, similar to
 // ANGLE_INSTANTIATE_TEST.  The macros are defined only for the Ns
 // currently in use, and can be expanded as necessary.
+#define ANGLE_INSTANTIATE_TEST_COMBINE_1(testName, print, combine1, first, ...) \
+    const decltype(first) testName##params[] = {first, ##__VA_ARGS__};          \
+    INSTANTIATE_TEST_SUITE_P(                                                   \
+        , testName, testing::Combine(ANGLE_INSTANTIATE_TEST_PLATFORMS(testName), combine1), print)
 #define ANGLE_INSTANTIATE_TEST_COMBINE_4(testName, print, combine1, combine2, combine3, combine4, \
                                          first, ...)                                              \
     const decltype(first) testName##params[] = {first, ##__VA_ARGS__};                            \
@@ -218,8 +244,8 @@ struct CombinedPrintToStringParamName
                                               combine1, combine2, combine3, combine4, combine5),  \
                              print)
 
-// Checks if a config is expected to be supported by checking a system-based white list.
-bool IsConfigWhitelisted(const SystemInfo &systemInfo, const PlatformParameters &param);
+// Checks if a config is expected to be supported by checking a system-based allow list.
+bool IsConfigAllowlisted(const SystemInfo &systemInfo, const PlatformParameters &param);
 
 // Determines if a config is supported by trying to initialize it. Does
 // not require SystemInfo.
@@ -234,12 +260,10 @@ SystemInfo *GetTestSystemInfo();
 std::vector<std::string> GetAvailableTestPlatformNames();
 
 // Active config (e.g. ES2_Vulkan).
-extern std::string gSelectedConfig;
+void SetSelectedConfig(const char *selectedConfig);
+bool IsConfigSelected();
 
-// Use a separate isolated process per test config. This works around
-// driver flakiness when using multiple APIs/windows/etc in the same
-// process.
-extern bool gSeparateProcessPerConfig;
+extern bool gEnableANGLEPerTestCaptureLabel;
 
 // For use with ANGLE_INSTANTIATE_TEST_ARRAY
 template <typename ParamsT>
@@ -291,6 +315,20 @@ std::vector<ParamT> CombineWithValues(const std::vector<ParamT> &in,
                                       ParamT combine(const ParamT &, ModifierT))
 {
     return CombineWithValues(in, std::begin(modifiers), std::end(modifiers), combine);
+}
+
+template <typename ParamT, typename FilterFunc>
+std::vector<ParamT> FilterWithFunc(const std::vector<ParamT> &in, FilterFunc filter)
+{
+    std::vector<ParamT> out;
+    for (const ParamT &param : in)
+    {
+        if (filter(param))
+        {
+            out.push_back(param);
+        }
+    }
+    return out;
 }
 }  // namespace angle
 

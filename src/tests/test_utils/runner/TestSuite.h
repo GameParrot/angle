@@ -9,6 +9,7 @@
 #include <map>
 #include <memory>
 #include <mutex>
+#include <queue>
 #include <string>
 #include <thread>
 
@@ -107,7 +108,10 @@ struct ProcessInfo : angle::NonCopyable
     std::string resultsFileName;
     std::string filterFileName;
     std::string commandLine;
+    std::string filterString;
 };
+
+using TestQueue = std::queue<std::vector<TestIdentifier>>;
 
 class TestSuite
 {
@@ -120,30 +124,36 @@ class TestSuite
 
   private:
     bool parseSingleArg(const char *argument);
-    bool launchChildTestProcess(const std::vector<TestIdentifier> &testsInBatch);
+    bool launchChildTestProcess(uint32_t batchId, const std::vector<TestIdentifier> &testsInBatch);
     bool finishProcess(ProcessInfo *processInfo);
     int printFailuresAndReturnCount() const;
     void startWatchdog();
 
     std::string mTestExecutableName;
     std::string mTestSuiteName;
-    std::vector<TestIdentifier> mTestQueue;
+    TestQueue mTestQueue;
     std::string mFilterString;
     std::string mFilterFile;
     std::string mResultsDirectory;
     std::string mResultsFile;
+    std::string mHistogramJsonFile;
     int mShardCount;
     int mShardIndex;
     angle::CrashCallback mCrashCallback;
     TestResults mTestResults;
     bool mBotMode;
+    bool mDebugTestGroups;
+    bool mGTestListTests;
+    bool mListTests;
+    bool mPrintTestStdout;
     int mBatchSize;
     int mCurrentResultCount;
     int mTotalResultCount;
     int mMaxProcesses;
     int mTestTimeout;
     int mBatchTimeout;
-    std::vector<std::string> mGoogleTestCommandLineArgs;
+    int mBatchId;
+    std::vector<std::string> mChildProcessArgs;
     std::map<TestIdentifier, FileLine> mTestFileLines;
     std::vector<ProcessInfo> mCurrentProcesses;
     std::thread mWatchdogThread;

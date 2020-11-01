@@ -21,20 +21,32 @@ enum class GlslangError
     InvalidSpirv,
 };
 
-struct GlslangSourceOptions
+constexpr gl::ShaderMap<const char *> kDefaultUniformNames = {
+    {gl::ShaderType::Vertex, sh::vk::kDefaultUniformsNameVS},
+    {gl::ShaderType::Geometry, sh::vk::kDefaultUniformsNameGS},
+    {gl::ShaderType::Fragment, sh::vk::kDefaultUniformsNameFS},
+    {gl::ShaderType::Compute, sh::vk::kDefaultUniformsNameCS},
+};
+
+struct GlslangProgramInterfaceInfo
 {
     // Uniforms set index:
-    uint32_t uniformsAndXfbDescriptorSetIndex = 0;
+    uint32_t uniformsAndXfbDescriptorSetIndex;
+    uint32_t currentUniformBindingIndex;
     // Textures set index:
-    uint32_t textureDescriptorSetIndex = 1;
+    uint32_t textureDescriptorSetIndex;
+    uint32_t currentTextureBindingIndex;
     // Other shader resources set index:
-    uint32_t shaderResourceDescriptorSetIndex = 2;
+    uint32_t shaderResourceDescriptorSetIndex;
+    uint32_t currentShaderResourceBindingIndex;
     // ANGLE driver uniforms set index:
-    uint32_t driverUniformsDescriptorSetIndex = 3;
+    uint32_t driverUniformsDescriptorSetIndex;
 
-    // Binding index start for transform feedback buffers:
-    uint32_t xfbBindingIndexStart = 16;
+    uint32_t locationsUsedForXfbExtension;
+};
 
+struct GlslangSourceOptions
+{
     bool useOldRewriteStructSamplers        = false;
     bool supportsTransformFeedbackExtension = false;
     bool emulateTransformFeedback           = false;
@@ -61,23 +73,55 @@ struct ShaderInterfaceVariableInfo
     // variables that share the same name, such as a vertex attribute and a fragment output.  They
     // will share this object since they have the same name, but will find possibly different
     // locations in their respective slots.
-    gl::ShaderMap<uint32_t> location;
-    gl::ShaderMap<uint32_t> component;
+    uint32_t location  = kInvalid;
+    uint32_t component = kInvalid;
     // The stages this shader interface variable is active.
     gl::ShaderBitSet activeStages;
     // Used for transform feedback extension to decorate vertex shader output.
     uint32_t xfbBuffer = kInvalid;
     uint32_t xfbOffset = kInvalid;
     uint32_t xfbStride = kInvalid;
+    // Indicates that the precision needs to be modified in the generated SPIR-V
+    // to support only transferring medium precision data when there's a precision
+    // mismatch between the shaders. For example, either the VS casts highp->mediump
+    // or the FS casts mediump->highp.
+    bool useRelaxedPrecision = false;
+    // Indicate if varying is input or output
+    bool varyingIsOutput = false;
+    // For vertex attributes, this is the number of components / locations.  These are used by the
+    // vertex attribute aliasing transformation only.
+    uint8_t attributeComponentCount = 0;
+    uint8_t attributeLocationCount  = 0;
 };
 
+// TODO: http://anglebug.com/4524: Need a different hash key than a string, since
+// that's slow to calculate.
 using ShaderInterfaceVariableInfoMap = std::unordered_map<std::string, ShaderInterfaceVariableInfo>;
+using ShaderMapInterfaceVariableInfoMap = gl::ShaderMap<ShaderInterfaceVariableInfoMap>;
 
 void GlslangInitialize();
 void GlslangRelease();
 
+bool GetImageNameWithoutIndices(std::string *name);
+
 // Get the mapped sampler name after the soure is transformed by GlslangGetShaderSource()
+std::string GetMappedSamplerNameOld(const std::string &originalName);
 std::string GlslangGetMappedSamplerName(const std::string &originalName);
+std::string GetXfbBufferName(const uint32_t bufferIndex);
+
+// NOTE: options.emulateTransformFeedback is ignored in this case. It is assumed to be always true.
+void GlslangGenTransformFeedbackEmulationOutputs(
+    const GlslangSourceOptions &options,
+    const gl::ProgramState &programState,
+    GlslangProgramInterfaceInfo *programInterfaceInfo,
+    std::string *vertexShader,
+    ShaderInterfaceVariableInfoMap *variableInfoMapOut);
+
+void GlslangAssignLocations(const GlslangSourceOptions &options,
+                            const gl::ProgramExecutable &programExecutable,
+                            const gl::ShaderType shaderType,
+                            GlslangProgramInterfaceInfo *programInterfaceInfo,
+                            gl::ShaderMap<ShaderInterfaceVariableInfoMap> *variableInfoMapOut);
 
 // Transform the source to include actual binding points for various shader resources (textures,
 // buffers, xfb, etc).  For some variables, these values are instead output to the variableInfoMap
@@ -86,14 +130,28 @@ std::string GlslangGetMappedSamplerName(const std::string &originalName);
 void GlslangGetShaderSource(const GlslangSourceOptions &options,
                             const gl::ProgramState &programState,
                             const gl::ProgramLinkedResources &resources,
+                            GlslangProgramInterfaceInfo *programInterfaceInfo,
                             gl::ShaderMap<std::string> *shaderSourcesOut,
-                            ShaderInterfaceVariableInfoMap *variableInfoMapOut);
+                            ShaderMapInterfaceVariableInfoMap *variableInfoMapOut);
 
-angle::Result GlslangGetShaderSpirvCode(GlslangErrorCallback callback,
+angle::Result GlslangTransformSpirvCode(const GlslangErrorCallback &callback,
+                                        const gl::ShaderType shaderType,
+                                        bool removeEarlyFragmentTestsOptimization,
+                                        bool removeDebugInfo,
+                                        const ShaderInterfaceVariableInfoMap &variableInfoMap,
+                                        const SpirvBlob &initialSpirvBlob,
+                                        SpirvBlob *spirvBlobOut);
+
+angle::Result GlslangGetShaderSpirvCode(const GlslangErrorCallback &callback,
+                                        const gl::ShaderBitSet &linkedShaderStages,
                                         const gl::Caps &glCaps,
                                         const gl::ShaderMap<std::string> &shaderSources,
-                                        const ShaderInterfaceVariableInfoMap &variableInfoMap,
                                         gl::ShaderMap<SpirvBlob> *spirvBlobsOut);
+
+angle::Result GlslangCompileShaderOneOff(const GlslangErrorCallback &callback,
+                                         gl::ShaderType shaderType,
+                                         const std::string &shaderSource,
+                                         SpirvBlob *spirvBlobOut);
 
 }  // namespace rx
 

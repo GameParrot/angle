@@ -114,6 +114,18 @@ bool ValidateGetRenderbufferImageANGLE(const Context *context,
                                        GLenum type,
                                        const void *pixels);
 
+// GL_ANGLE_get_tex_level_parameter
+bool ValidateGetTexLevelParameterivANGLE(const Context *context,
+                                         TextureTarget targetPacked,
+                                         GLint level,
+                                         GLenum pname,
+                                         const GLint *params);
+bool ValidateGetTexLevelParameterfvANGLE(const Context *context,
+                                         TextureTarget targetPacked,
+                                         GLint level,
+                                         GLenum pname,
+                                         const GLfloat *params);
+
 // GL_ANGLE_instanced_arrays
 bool ValidateDrawArraysInstancedANGLE(const Context *context,
                                       PrimitiveMode modePacked,
@@ -127,6 +139,52 @@ bool ValidateDrawElementsInstancedANGLE(const Context *context,
                                         const void *indices,
                                         GLsizei primcount);
 bool ValidateVertexAttribDivisorANGLE(const Context *context, GLuint index, GLuint divisor);
+
+// GL_ANGLE_memory_object_flags
+bool ValidateTexStorageMemFlags2DANGLE(const Context *context,
+                                       TextureType targetPacked,
+                                       GLsizei levels,
+                                       GLenum internalFormat,
+                                       GLsizei width,
+                                       GLsizei height,
+                                       MemoryObjectID memoryPacked,
+                                       GLuint64 offset,
+                                       GLbitfield createFlags,
+                                       GLbitfield usageFlags);
+bool ValidateTexStorageMemFlags2DMultisampleANGLE(const Context *context,
+                                                  TextureType targetPacked,
+                                                  GLsizei samples,
+                                                  GLenum internalFormat,
+                                                  GLsizei width,
+                                                  GLsizei height,
+                                                  GLboolean fixedSampleLocations,
+                                                  MemoryObjectID memoryPacked,
+                                                  GLuint64 offset,
+                                                  GLbitfield createFlags,
+                                                  GLbitfield usageFlags);
+bool ValidateTexStorageMemFlags3DANGLE(const Context *context,
+                                       TextureType targetPacked,
+                                       GLsizei levels,
+                                       GLenum internalFormat,
+                                       GLsizei width,
+                                       GLsizei height,
+                                       GLsizei depth,
+                                       MemoryObjectID memoryPacked,
+                                       GLuint64 offset,
+                                       GLbitfield createFlags,
+                                       GLbitfield usageFlags);
+bool ValidateTexStorageMemFlags3DMultisampleANGLE(const Context *context,
+                                                  TextureType targetPacked,
+                                                  GLsizei samples,
+                                                  GLenum internalFormat,
+                                                  GLsizei width,
+                                                  GLsizei height,
+                                                  GLsizei depth,
+                                                  GLboolean fixedSampleLocations,
+                                                  MemoryObjectID memoryPacked,
+                                                  GLuint64 offset,
+                                                  GLbitfield createFlags,
+                                                  GLbitfield usageFlags);
 
 // GL_ANGLE_memory_object_fuchsia
 bool ValidateImportMemoryZirconHandleANGLE(const Context *context,
@@ -631,16 +689,6 @@ bool ValidateTexStorage2DMultisampleANGLE(const Context *context,
                                           GLsizei width,
                                           GLsizei height,
                                           GLboolean fixedsamplelocations);
-bool ValidateGetTexLevelParameterivANGLE(const Context *context,
-                                         TextureTarget targetPacked,
-                                         GLint level,
-                                         GLenum pname,
-                                         const GLint *params);
-bool ValidateGetTexLevelParameterfvANGLE(const Context *context,
-                                         TextureTarget targetPacked,
-                                         GLint level,
-                                         GLenum pname,
-                                         const GLfloat *params);
 bool ValidateGetMultisamplefvANGLE(const Context *context,
                                    GLenum pname,
                                    GLuint index,
@@ -695,126 +743,13 @@ bool ValidateCopySubTextureCHROMIUM(const Context *context,
 
 // GL_CHROMIUM_framebuffer_mixed_samples
 bool ValidateCoverageModulationCHROMIUM(const Context *context, GLenum components);
-bool ValidateMatrixLoadfCHROMIUM(const Context *context, GLenum matrixMode, const GLfloat *matrix);
-bool ValidateMatrixLoadIdentityCHROMIUM(const Context *context, GLenum matrixMode);
 
 // GL_CHROMIUM_lose_context
 bool ValidateLoseContextCHROMIUM(const Context *context,
                                  GraphicsResetStatus currentPacked,
                                  GraphicsResetStatus otherPacked);
 
-// GL_CHROMIUM_path_rendering
-bool ValidateGenPathsCHROMIUM(const Context *context, GLsizei range);
-bool ValidateDeletePathsCHROMIUM(const Context *context, PathID firstPacked, GLsizei range);
-bool ValidateIsPathCHROMIUM(const Context *context, PathID pathPacked);
-bool ValidatePathCommandsCHROMIUM(const Context *context,
-                                  PathID pathPacked,
-                                  GLsizei numCommands,
-                                  const GLubyte *commands,
-                                  GLsizei numCoords,
-                                  GLenum coordType,
-                                  const void *coords);
-bool ValidatePathParameterfCHROMIUM(const Context *context,
-                                    PathID pathPacked,
-                                    GLenum pname,
-                                    GLfloat value);
-bool ValidatePathParameteriCHROMIUM(const Context *context,
-                                    PathID pathPacked,
-                                    GLenum pname,
-                                    GLint value);
-bool ValidateGetPathParameterfvCHROMIUM(const Context *context,
-                                        PathID pathPacked,
-                                        GLenum pname,
-                                        const GLfloat *value);
-bool ValidateGetPathParameterivCHROMIUM(const Context *context,
-                                        PathID pathPacked,
-                                        GLenum pname,
-                                        const GLint *value);
-bool ValidatePathStencilFuncCHROMIUM(const Context *context, GLenum func, GLint ref, GLuint mask);
-bool ValidateStencilFillPathCHROMIUM(const Context *context,
-                                     PathID pathPacked,
-                                     GLenum fillMode,
-                                     GLuint mask);
-bool ValidateStencilStrokePathCHROMIUM(const Context *context,
-                                       PathID pathPacked,
-                                       GLint reference,
-                                       GLuint mask);
-bool ValidateCoverFillPathCHROMIUM(const Context *context, PathID pathPacked, GLenum coverMode);
-bool ValidateCoverStrokePathCHROMIUM(const Context *context, PathID pathPacked, GLenum coverMode);
-bool ValidateStencilThenCoverFillPathCHROMIUM(const Context *context,
-                                              PathID pathPacked,
-                                              GLenum fillMode,
-                                              GLuint mask,
-                                              GLenum coverMode);
-bool ValidateStencilThenCoverStrokePathCHROMIUM(const Context *context,
-                                                PathID pathPacked,
-                                                GLint reference,
-                                                GLuint mask,
-                                                GLenum coverMode);
-bool ValidateCoverFillPathInstancedCHROMIUM(const Context *context,
-                                            GLsizei numPath,
-                                            GLenum pathNameType,
-                                            const void *paths,
-                                            PathID pathBasePacked,
-                                            GLenum coverMode,
-                                            GLenum transformType,
-                                            const GLfloat *transformValues);
-bool ValidateCoverStrokePathInstancedCHROMIUM(const Context *context,
-                                              GLsizei numPath,
-                                              GLenum pathNameType,
-                                              const void *paths,
-                                              PathID pathBasePacked,
-                                              GLenum coverMode,
-                                              GLenum transformType,
-                                              const GLfloat *transformValues);
-bool ValidateStencilStrokePathInstancedCHROMIUM(const Context *context,
-                                                GLsizei numPath,
-                                                GLenum pathNameType,
-                                                const void *paths,
-                                                PathID pathBasePacked,
-                                                GLint reference,
-                                                GLuint mask,
-                                                GLenum transformType,
-                                                const GLfloat *transformValues);
-bool ValidateStencilFillPathInstancedCHROMIUM(const Context *context,
-                                              GLsizei numPaths,
-                                              GLenum pathNameType,
-                                              const void *paths,
-                                              PathID pathBasePacked,
-                                              GLenum fillMode,
-                                              GLuint mask,
-                                              GLenum transformType,
-                                              const GLfloat *transformValues);
-bool ValidateStencilThenCoverFillPathInstancedCHROMIUM(const Context *context,
-                                                       GLsizei numPaths,
-                                                       GLenum pathNameType,
-                                                       const void *paths,
-                                                       PathID pathBasePacked,
-                                                       GLenum fillMode,
-                                                       GLuint mask,
-                                                       GLenum coverMode,
-                                                       GLenum transformType,
-                                                       const GLfloat *transformValues);
-bool ValidateStencilThenCoverStrokePathInstancedCHROMIUM(const Context *context,
-                                                         GLsizei numPaths,
-                                                         GLenum pathNameType,
-                                                         const void *paths,
-                                                         PathID pathBasePacked,
-                                                         GLint reference,
-                                                         GLuint mask,
-                                                         GLenum coverMode,
-                                                         GLenum transformType,
-                                                         const GLfloat *transformValues);
-bool ValidateBindFragmentInputLocationCHROMIUM(const Context *context,
-                                               ShaderProgramID programsPacked,
-                                               GLint location,
-                                               const GLchar *name);
-bool ValidateProgramPathFragmentInputGenCHROMIUM(const Context *context,
-                                                 ShaderProgramID programPacked,
-                                                 GLint location,
-                                                 GLenum genMode,
-                                                 GLint components,
-                                                 const GLfloat *coeffs);
+// GL_EXT_EGL_image_array
 
 // GL_EXT_blend_func_extended
 bool ValidateBindFragDataLocationEXT(const Context *context,
@@ -833,6 +768,31 @@ bool ValidateGetProgramResourceLocationIndexEXT(const Context *context,
                                                 ShaderProgramID programPacked,
                                                 GLenum programInterface,
                                                 const GLchar *name);
+
+// GL_EXT_buffer_storage
+bool ValidateBufferStorageEXT(const Context *context,
+                              BufferBinding targetPacked,
+                              GLsizeiptr size,
+                              const void *data,
+                              GLbitfield flags);
+
+// GL_EXT_copy_image
+bool ValidateCopyImageSubDataEXT(const Context *context,
+                                 GLuint srcName,
+                                 GLenum srcTarget,
+                                 GLint srcLevel,
+                                 GLint srcX,
+                                 GLint srcY,
+                                 GLint srcZ,
+                                 GLuint dstName,
+                                 GLenum dstTarget,
+                                 GLint dstLevel,
+                                 GLint dstX,
+                                 GLint dstY,
+                                 GLint dstZ,
+                                 GLsizei srcWidth,
+                                 GLsizei srcHeight,
+                                 GLsizei srcDepth);
 
 // GL_EXT_debug_marker
 bool ValidateInsertEventMarkerEXT(const Context *context, GLsizei length, const GLchar *marker);
@@ -1036,8 +996,8 @@ bool ValidateImportMemoryFdEXT(const Context *context,
 bool ValidateFramebufferTexture2DMultisampleEXT(const Context *context,
                                                 GLenum target,
                                                 GLenum attachment,
-                                                GLenum textarget,
-                                                GLuint texture,
+                                                TextureTarget textargetPacked,
+                                                TextureID texturePacked,
                                                 GLint level,
                                                 GLsizei samples);
 bool ValidateRenderbufferStorageMultisampleEXT(const Context *context,
@@ -1112,6 +1072,18 @@ bool ValidateImportSemaphoreFdEXT(const Context *context,
                                   HandleType handleTypePacked,
                                   GLint fd);
 
+// GL_EXT_texture_buffer
+bool ValidateTexBufferEXT(const Context *context,
+                          TextureType targetPacked,
+                          GLenum internalformat,
+                          BufferID bufferPacked);
+bool ValidateTexBufferRangeEXT(const Context *context,
+                               TextureType targetPacked,
+                               GLenum internalformat,
+                               BufferID bufferPacked,
+                               GLintptr offset,
+                               GLsizeiptr size);
+
 // GL_EXT_texture_compression_bptc
 
 // GL_EXT_texture_compression_dxt1
@@ -1122,9 +1094,13 @@ bool ValidateImportSemaphoreFdEXT(const Context *context,
 
 // GL_EXT_texture_compression_s3tc_srgb
 
+// GL_EXT_texture_cube_map_array
+
 // GL_EXT_texture_filter_anisotropic
 
 // GL_EXT_texture_format_BGRA8888
+
+// GL_EXT_texture_sRGB_R8
 
 // GL_EXT_texture_storage
 bool ValidateTexStorage1DEXT(const Context *context,
@@ -1225,6 +1201,24 @@ bool ValidateEGLImageTargetTexture2DOES(const Context *context,
                                         GLeglImageOES image);
 
 // GL_OES_compressed_ETC1_RGB8_texture
+
+// GL_OES_copy_image
+bool ValidateCopyImageSubDataOES(const Context *context,
+                                 GLuint srcName,
+                                 GLenum srcTarget,
+                                 GLint srcLevel,
+                                 GLint srcX,
+                                 GLint srcY,
+                                 GLint srcZ,
+                                 GLuint dstName,
+                                 GLenum dstTarget,
+                                 GLint dstLevel,
+                                 GLint dstX,
+                                 GLint dstY,
+                                 GLint dstZ,
+                                 GLsizei srcWidth,
+                                 GLsizei srcHeight,
+                                 GLsizei srcDepth);
 
 // GL_OES_depth32
 
@@ -1399,6 +1393,9 @@ bool ValidateQueryMatrixxOES(const Context *context,
                              const GLfixed *mantissa,
                              const GLint *exponent);
 
+// GL_OES_sample_shading
+bool ValidateMinSampleShadingOES(const Context *context, GLfloat value);
+
 // GL_OES_texture_3D
 bool ValidateCompressedTexImage3DOES(const Context *context,
                                      TextureTarget targetPacked,
@@ -1497,6 +1494,18 @@ bool ValidateTexParameterIuivOES(const Context *context,
                                  GLenum pname,
                                  const GLuint *params);
 
+// GL_OES_texture_buffer
+bool ValidateTexBufferOES(const Context *context,
+                          TextureType targetPacked,
+                          GLenum internalformat,
+                          BufferID bufferPacked);
+bool ValidateTexBufferRangeOES(const Context *context,
+                               TextureType targetPacked,
+                               GLenum internalformat,
+                               BufferID bufferPacked,
+                               GLintptr offset,
+                               GLsizeiptr size);
+
 // GL_OES_texture_cube_map
 bool ValidateGetTexGenfvOES(const Context *context,
                             GLenum coord,
@@ -1517,7 +1526,11 @@ bool ValidateTexGenivOES(const Context *context, GLenum coord, GLenum pname, con
 bool ValidateTexGenxOES(const Context *context, GLenum coord, GLenum pname, GLfixed param);
 bool ValidateTexGenxvOES(const Context *context, GLenum coord, GLenum pname, const GLfixed *params);
 
+// GL_OES_texture_cube_map_array
+
 // GL_OES_texture_half_float
+
+// GL_OES_texture_stencil8
 
 // GL_OES_texture_storage_multisample_2d_array
 bool ValidateTexStorage3DMultisampleOES(const Context *context,

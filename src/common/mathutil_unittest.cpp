@@ -211,12 +211,21 @@ TEST(MathUtilTest, CountLeadingZeros)
     EXPECT_EQ(32u, CountLeadingZeros(0));
 }
 
-// Some basic tests. Tests that rounding up zero produces zero.
+// Some basic tests. Pow2 roundUp test and test that rounding up zero produces zero.
+TEST(MathUtilTest, Pow2RoundUp)
+{
+    EXPECT_EQ(0u, rx::roundUpPow2(0u, 4u));
+    EXPECT_EQ(4u, rx::roundUpPow2(1u, 4u));
+    EXPECT_EQ(4u, rx::roundUpPow2(4u, 4u));
+}
+
+// Non-pow2 test.
 TEST(MathUtilTest, BasicRoundUp)
 {
-    EXPECT_EQ(0u, rx::roundUp(0u, 4u));
-    EXPECT_EQ(4u, rx::roundUp(1u, 4u));
-    EXPECT_EQ(4u, rx::roundUp(4u, 4u));
+    EXPECT_EQ(0u, rx::roundUp(0u, 5u));
+    EXPECT_EQ(5u, rx::roundUp(1u, 5u));
+    EXPECT_EQ(5u, rx::roundUp(4u, 5u));
+    EXPECT_EQ(5u, rx::roundUp(5u, 5u));
 }
 
 // Test that rounding up zero produces zero for checked ints.
@@ -258,11 +267,12 @@ TEST(MathUtilTest, BitCount)
     EXPECT_EQ(32, gl::BitCount(0xFFFFFFFFu));
     EXPECT_EQ(10, gl::BitCount(0x17103121u));
 
-#if defined(ANGLE_IS_64_BIT_CPU)
     EXPECT_EQ(0, gl::BitCount(static_cast<uint64_t>(0ull)));
     EXPECT_EQ(32, gl::BitCount(static_cast<uint64_t>(0xFFFFFFFFull)));
     EXPECT_EQ(10, gl::BitCount(static_cast<uint64_t>(0x17103121ull)));
-#endif  // defined(ANGLE_IS_64_BIT_CPU)
+
+    EXPECT_EQ(33, gl::BitCount(static_cast<uint64_t>(0xFFFFFFFF80000000ull)));
+    EXPECT_EQ(11, gl::BitCount(static_cast<uint64_t>(0x1710312180000000ull)));
 }
 
 // Test ScanForward, which scans for the least significant 1 bit from a non-zero integer.
@@ -272,11 +282,13 @@ TEST(MathUtilTest, ScanForward)
     EXPECT_EQ(16ul, gl::ScanForward(0x80010000u));
     EXPECT_EQ(31ul, gl::ScanForward(0x80000000u));
 
-#if defined(ANGLE_IS_64_BIT_CPU)
     EXPECT_EQ(0ul, gl::ScanForward(static_cast<uint64_t>(1ull)));
     EXPECT_EQ(16ul, gl::ScanForward(static_cast<uint64_t>(0x80010000ull)));
     EXPECT_EQ(31ul, gl::ScanForward(static_cast<uint64_t>(0x80000000ull)));
-#endif  // defined(ANGLE_IS_64_BIT_CPU)
+
+    EXPECT_EQ(32ul, gl::ScanForward(static_cast<uint64_t>(0x100000000ull)));
+    EXPECT_EQ(48ul, gl::ScanForward(static_cast<uint64_t>(0x8001000000000000ull)));
+    EXPECT_EQ(63ul, gl::ScanForward(static_cast<uint64_t>(0x8000000000000000ull)));
 }
 
 // Test ScanReverse, which scans for the most significant 1 bit from a non-zero integer.

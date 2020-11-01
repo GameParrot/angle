@@ -33,7 +33,9 @@ bool IsInterpolationIn(TQualifier qualifier)
     {
         case EvqSmoothIn:
         case EvqFlatIn:
+        case EvqNoPerspectiveIn:
         case EvqCentroidIn:
+        case EvqSampleIn:
             return true;
         default:
             return false;
@@ -377,6 +379,8 @@ GLenum GLVariableType(const TType &type)
             return GL_SAMPLER_2D_MULTISAMPLE;
         case EbtSampler2DMSArray:
             return GL_SAMPLER_2D_MULTISAMPLE_ARRAY;
+        case EbtSamplerCubeArray:
+            return GL_SAMPLER_CUBE_MAP_ARRAY;
         case EbtISampler2D:
             return GL_INT_SAMPLER_2D;
         case EbtISampler3D:
@@ -389,6 +393,8 @@ GLenum GLVariableType(const TType &type)
             return GL_INT_SAMPLER_2D_MULTISAMPLE;
         case EbtISampler2DMSArray:
             return GL_INT_SAMPLER_2D_MULTISAMPLE_ARRAY;
+        case EbtISamplerCubeArray:
+            return GL_INT_SAMPLER_CUBE_MAP_ARRAY;
         case EbtUSampler2D:
             return GL_UNSIGNED_INT_SAMPLER_2D;
         case EbtUSampler3D:
@@ -401,12 +407,16 @@ GLenum GLVariableType(const TType &type)
             return GL_UNSIGNED_INT_SAMPLER_2D_MULTISAMPLE;
         case EbtUSampler2DMSArray:
             return GL_UNSIGNED_INT_SAMPLER_2D_MULTISAMPLE_ARRAY;
+        case EbtUSamplerCubeArray:
+            return GL_UNSIGNED_INT_SAMPLER_CUBE_MAP_ARRAY;
         case EbtSampler2DShadow:
             return GL_SAMPLER_2D_SHADOW;
         case EbtSamplerCubeShadow:
             return GL_SAMPLER_CUBE_SHADOW;
         case EbtSampler2DArrayShadow:
             return GL_SAMPLER_2D_ARRAY_SHADOW;
+        case EbtSamplerCubeArrayShadow:
+            return GL_SAMPLER_CUBE_MAP_ARRAY_SHADOW;
         case EbtImage2D:
             return GL_IMAGE_2D;
         case EbtIImage2D:
@@ -431,6 +441,12 @@ GLenum GLVariableType(const TType &type)
             return GL_INT_IMAGE_CUBE;
         case EbtUImageCube:
             return GL_UNSIGNED_INT_IMAGE_CUBE;
+        case EbtImageCubeArray:
+            return GL_IMAGE_CUBE_MAP_ARRAY;
+        case EbtIImageCubeArray:
+            return GL_INT_IMAGE_CUBE_MAP_ARRAY;
+        case EbtUImageCubeArray:
+            return GL_UNSIGNED_INT_IMAGE_CUBE_MAP_ARRAY;
         case EbtAtomicCounter:
             return GL_UNSIGNED_INT_ATOMIC_COUNTER;
         case EbtSamplerVideoWEBGL:
@@ -519,9 +535,11 @@ bool IsVaryingOut(TQualifier qualifier)
         case EvqVaryingOut:
         case EvqSmoothOut:
         case EvqFlatOut:
+        case EvqNoPerspectiveOut:
         case EvqCentroidOut:
         case EvqVertexOut:
         case EvqGeometryOut:
+        case EvqSampleOut:
             return true;
 
         default:
@@ -538,9 +556,11 @@ bool IsVaryingIn(TQualifier qualifier)
         case EvqVaryingIn:
         case EvqSmoothIn:
         case EvqFlatIn:
+        case EvqNoPerspectiveIn:
         case EvqCentroidIn:
         case EvqFragmentIn:
         case EvqGeometryIn:
+        case EvqSampleIn:
             return true;
 
         default:
@@ -569,6 +589,10 @@ InterpolationType GetInterpolationType(TQualifier qualifier)
         case EvqFlatOut:
             return INTERPOLATION_FLAT;
 
+        case EvqNoPerspectiveIn:
+        case EvqNoPerspectiveOut:
+            return INTERPOLATION_NOPERSPECTIVE;
+
         case EvqSmoothIn:
         case EvqSmoothOut:
         case EvqVertexOut:
@@ -583,6 +607,9 @@ InterpolationType GetInterpolationType(TQualifier qualifier)
         case EvqCentroidOut:
             return INTERPOLATION_CENTROID;
 
+        case EvqSampleIn:
+        case EvqSampleOut:
+            return INTERPOLATION_SAMPLE;
         default:
             UNREACHABLE();
 #if !UNREACHABLE_IS_NORETURN
@@ -690,6 +717,7 @@ bool IsBuiltinOutputVariable(TQualifier qualifier)
         case EvqSecondaryFragColorEXT:
         case EvqFragData:
         case EvqSecondaryFragDataEXT:
+        case EvqClipDistance:
             return true;
         default:
             break;
@@ -938,6 +966,19 @@ bool IsValidImplicitConversion(sh::ImplicitTypeConversion conversion, TOperator 
             break;
     }
     return false;
+}
+
+size_t FindFieldIndex(const TFieldList &fieldList, const char *fieldName)
+{
+    for (size_t fieldIndex = 0; fieldIndex < fieldList.size(); ++fieldIndex)
+    {
+        if (strcmp(fieldList[fieldIndex]->name().data(), fieldName) == 0)
+        {
+            return fieldIndex;
+        }
+    }
+    UNREACHABLE();
+    return 0;
 }
 
 }  // namespace sh

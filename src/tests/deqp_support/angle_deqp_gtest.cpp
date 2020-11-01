@@ -20,7 +20,7 @@
 #include "common/platform.h"
 #include "common/string_utils.h"
 #include "common/system_utils.h"
-#include "platform/Platform.h"
+#include "platform/PlatformMethods.h"
 #include "tests/test_expectations/GPUTestConfig.h"
 #include "tests/test_expectations/GPUTestExpectationsParser.h"
 #include "util/test_utils.h"
@@ -31,12 +31,9 @@ namespace
 {
 bool gGlobalError = false;
 bool gExpectError = false;
+uint32_t gBatchId = 0;
 
 constexpr char kInfoTag[] = "*RESULT";
-
-// Stored as globals to work around a Clang bug. http://crbug.com/951458
-std::vector<std::string> gUnexpectedFailed;
-std::vector<std::string> gUnexpectedPasses;
 
 void HandlePlatformError(PlatformMethods *platform, const char *errorMessage)
 {
@@ -105,6 +102,7 @@ constexpr APIInfo kEGLDisplayAPIs[] = {
 constexpr char kdEQPEGLString[]  = "--deqp-egl-display-type=";
 constexpr char kANGLEEGLString[] = "--use-angle=";
 constexpr char kdEQPCaseString[] = "--deqp-case=";
+constexpr char kBatchIdString[]  = "--batch-id=";
 
 std::array<char, 500> gCaseStringBuffer;
 
@@ -373,7 +371,8 @@ class dEQPTest : public testing::TestWithParam<size_t>
         // crashed tests we track how many tests we "tried" to run.
         sTestCount++;
 
-        if (caseInfo.mExpectation == GPUTestExpectationsParser::kGpuTestSkip)
+        if (caseInfo.mExpectation == GPUTestExpectationsParser::kGpuTestSkip ||
+            caseInfo.mExpectation == GPUTestExpectationsParser::kGpuTestTimeout)
         {
             sSkippedTestCount++;
             std::cout << "Test skipped.\n";
@@ -398,13 +397,13 @@ class dEQPTest : public testing::TestWithParam<size_t>
 
             if (!testSucceeded)
             {
-                gUnexpectedFailed.push_back(caseInfo.mDEQPName);
+                sUnexpectedFailed.push_back(caseInfo.mDEQPName);
             }
         }
         else if (testSucceeded)
         {
             std::cout << "Test expected to fail but passed!" << std::endl;
-            gUnexpectedPasses.push_back(caseInfo.mDEQPName);
+            sUnexpectedPasses.push_back(caseInfo.mDEQPName);
         }
     }
 
@@ -444,21 +443,21 @@ class dEQPTest : public testing::TestWithParam<size_t>
         std::cout << GetTestStatLine("Exception", std::to_string(sTestExceptionCount));
         std::cout << GetTestStatLine("Crashed", std::to_string(crashedCount));
 
-        if (!gUnexpectedPasses.empty())
+        if (!sUnexpectedPasses.empty())
         {
             std::cout << GetTestStatLine("Unexpected Passed Count",
-                                         std::to_string(gUnexpectedPasses.size()));
-            for (const std::string &testName : gUnexpectedPasses)
+                                         std::to_string(sUnexpectedPasses.size()));
+            for (const std::string &testName : sUnexpectedPasses)
             {
                 std::cout << GetTestStatLine("Unexpected Passed Tests", testName);
             }
         }
 
-        if (!gUnexpectedFailed.empty())
+        if (!sUnexpectedFailed.empty())
         {
             std::cout << GetTestStatLine("Unexpected Failed Count",
-                                         std::to_string(gUnexpectedFailed.size()));
-            for (const std::string &testName : gUnexpectedFailed)
+                                         std::to_string(sUnexpectedFailed.size()));
+            for (const std::string &testName : sUnexpectedFailed)
             {
                 std::cout << GetTestStatLine("Unexpected Failed Tests", testName);
             }
@@ -471,6 +470,9 @@ class dEQPTest : public testing::TestWithParam<size_t>
     static uint32_t sTestExceptionCount;
     static uint32_t sNotSupportedTestCount;
     static uint32_t sSkippedTestCount;
+
+    static std::vector<std::string> sUnexpectedFailed;
+    static std::vector<std::string> sUnexpectedPasses;
 };
 
 template <size_t TestModuleIndex>
@@ -485,6 +487,10 @@ template <size_t TestModuleIndex>
 uint32_t dEQPTest<TestModuleIndex>::sNotSupportedTestCount = 0;
 template <size_t TestModuleIndex>
 uint32_t dEQPTest<TestModuleIndex>::sSkippedTestCount = 0;
+template <size_t TestModuleIndex>
+std::vector<std::string> dEQPTest<TestModuleIndex>::sUnexpectedFailed;
+template <size_t TestModuleIndex>
+std::vector<std::string> dEQPTest<TestModuleIndex>::sUnexpectedPasses;
 
 // static
 template <size_t TestModuleIndex>
@@ -496,8 +502,8 @@ void dEQPTest<TestModuleIndex>::SetUpTestCase()
     sTestExceptionCount    = 0;
     sTestCount             = 0;
     sSkippedTestCount      = 0;
-    gUnexpectedPasses.clear();
-    gUnexpectedFailed.clear();
+    sUnexpectedPasses.clear();
+    sUnexpectedFailed.clear();
 
     std::vector<const char *> argv;
 
@@ -513,6 +519,25 @@ void dEQPTest<TestModuleIndex>::SetUpTestCase()
     const char *targetConfigName = gEGLConfigName;
     std::string configArgString  = std::string(gdEQPEGLConfigNameString) + targetConfigName;
     argv.push_back(configArgString.c_str());
+
+    // Hide SwiftShader window to prevent a race with Xvfb causing hangs on test bots
+    if (gInitAPI && gInitAPI->second == GPUTestConfig::kAPISwiftShader)
+    {
+        argv.push_back("--deqp-visibility=hidden");
+    }
+
+    std::string logNameString;
+    if (gBatchId != 0)
+    {
+        std::stringstream logNameStream;
+        logNameStream << "--deqp-log-filename=test-results-batch-" << std::setfill('0')
+                      << std::setw(3) << gBatchId << ".qpa";
+        logNameString = logNameStream.str();
+        argv.push_back(logNameString.c_str());
+
+        // Flushing during multi-process execution punishes HDDs. http://anglebug.com/5157
+        argv.push_back("--deqp-log-flush=disable");
+    }
 
     // Init the platform.
     if (!deqp_libtester_init_platform(static_cast<int>(argv.size()), argv.data(),
@@ -619,13 +644,10 @@ void HandleCaseName(const char *caseString, int *argc, int argIndex, char **argv
     argv[argIndex] = gCaseStringBuffer.data();
 }
 
-void DeleteArg(int *argc, int argIndex, char **argv)
+void HandleBatchId(const char *batchIdString)
 {
-    (*argc)--;
-    for (int moveIndex = argIndex; moveIndex < *argc; ++moveIndex)
-    {
-        argv[moveIndex] = argv[moveIndex + 1];
-    }
+    std::stringstream batchIdStream(batchIdString);
+    batchIdStream >> gBatchId;
 }
 }  // anonymous namespace
 
@@ -638,28 +660,25 @@ void InitTestHarness(int *argc, char **argv)
         if (strncmp(argv[argIndex], kdEQPEGLString, strlen(kdEQPEGLString)) == 0)
         {
             HandleDisplayType(argv[argIndex] + strlen(kdEQPEGLString));
-            DeleteArg(argc, argIndex, argv);
         }
         else if (strncmp(argv[argIndex], kANGLEEGLString, strlen(kANGLEEGLString)) == 0)
         {
             HandleDisplayType(argv[argIndex] + strlen(kANGLEEGLString));
-            DeleteArg(argc, argIndex, argv);
         }
         else if (strncmp(argv[argIndex], gdEQPEGLConfigNameString,
                          strlen(gdEQPEGLConfigNameString)) == 0)
         {
             HandleEGLConfigName(argv[argIndex] + strlen(gdEQPEGLConfigNameString));
-            DeleteArg(argc, argIndex, argv);
         }
         else if (strncmp(argv[argIndex], kdEQPCaseString, strlen(kdEQPCaseString)) == 0)
         {
             HandleCaseName(argv[argIndex] + strlen(kdEQPCaseString), argc, argIndex, argv);
-            argIndex++;
         }
-        else
+        else if (strncmp(argv[argIndex], kBatchIdString, strlen(kBatchIdString)) == 0)
         {
-            argIndex++;
+            HandleBatchId(argv[argIndex] + strlen(kBatchIdString));
         }
+        argIndex++;
     }
 }
 }  // namespace angle

@@ -2,34 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// This file contains a list of defective dEQP conformance tests. The expected
-// format is:
-//  {BUG#} {MODIFIERS} : {TEST_NAME} = {PASS,FAIL,FLAKY,TIMEOUT,SKIP}
-//
-// MODIFIERS can be a combination of the below list, combined with a logical AND:
-//  WIN XP VISTA WIN7 WIN8 WIN10
-//  MAC LEOPARD SNOWLEOPARD LION MOUNTAINLION MAVERICKS YOSEMITE ELCAPITAN SIERRA HIGHSIERRA MOJAVE
-//  LINUX CHROMEOS ANDROID
-//  NVIDIA AMD INTEL
-//  DEBUG RELEASE
-//  D3D9 D3D11 OPENGL GLES VULKAN
-//  NEXUS5X PIXEL2ORXL
-//  QUADROP400
-//  SWIFTSHADER
-//
-//
-// TEST_NAME can be a specific test name, or have a '*' in the end, which
-// indicates a prefix matching.
-//
-// Examples:
-// fails on both windows and mac (crash)
-//  91530 WIN : context_lost_restored = SKIP
-//  91530 MAC : context_lost_restored = SKIP
-// fails on windows using NVIDIA GPUs
-//  91533 WIN NVIDIA : gl_min_uniforms = FAIL
-// fails on Nexus5X with GLES backend (hangs)
-//  91531 NEXUS5X GLES : conformance_more_* = SKIP
-
+// See README.md for format.
 
 ////
 //// Desktop expectations
@@ -105,16 +78,22 @@
 3865 D3D11 : dEQP-GLES31.functional.compute.basic.copy_image_to_ssbo_large = FAIL
 3865 D3D11 : dEQP-GLES31.functional.compute.basic.copy_ssbo_to_image_large = FAIL
 
+// Simultaneous use of GL_CONSTANT_ALPHA/GL_ONE_MINUS_CONSTANT_ALPHA and GL_CONSTANT_COLOR/GL_ONE_MINUS_CONSTANT_COLOR as color factors
+4394 D3D11 : dEQP-GLES31.functional.draw_buffers_indexed.random.max_required_draw_buffers.4 = FAIL
+4394 D3D11 : dEQP-GLES31.functional.draw_buffers_indexed.random.max_required_draw_buffers.7 = FAIL
+4394 D3D11 : dEQP-GLES31.functional.draw_buffers_indexed.random.max_implementation_draw_buffers.9 = FAIL
+4394 D3D11 : dEQP-GLES31.functional.draw_buffers_indexed.random.max_implementation_draw_buffers.15 = FAIL
+
 // Failing with dEQP roll
 3447 D3D11 : dEQP-GLES31.functional.ssbo.layout.random.all_per_block_buffers.22 = FAIL
 3447 D3D11 : dEQP-GLES31.functional.ssbo.layout.random.all_per_block_buffers.41 = FAIL
-4234 D3D11 : dEQP-GLES31.functional.debug.negative_coverage.get_error.compute.program_not_active = FAIL
-4234 OPENGL : dEQP-GLES31.functional.debug.negative_coverage.get_error.compute.program_not_active = FAIL
-4234 D3D11 : dEQP-GLES31.functional.debug.negative_coverage.log.compute.program_not_active = FAIL
-4234 OPENGL : dEQP-GLES31.functional.debug.negative_coverage.log.compute.program_not_active = FAIL
+4234 D3D11 : dEQP-GLES31.functional.debug.negative_coverage.get_error.compute.program_not_active = SKIP
+4234 OPENGL : dEQP-GLES31.functional.debug.negative_coverage.get_error.compute.program_not_active = SKIP
+4234 D3D11 : dEQP-GLES31.functional.debug.negative_coverage.log.compute.program_not_active = SKIP
+4234 OPENGL : dEQP-GLES31.functional.debug.negative_coverage.log.compute.program_not_active = SKIP
 4234 D3D11 : dEQP-GLES31.functional.debug.negative_coverage.get_error.buffer.renderbuffer_storage_multisample = FAIL
-4234 D3D11 : dEQP-GLES31.functional.debug.negative_coverage.callbacks.compute.program_not_active = FAIL
-4234 OPENGL : dEQP-GLES31.functional.debug.negative_coverage.callbacks.compute.program_not_active = FAIL
+4234 D3D11 : dEQP-GLES31.functional.debug.negative_coverage.callbacks.compute.program_not_active = SKIP
+4234 OPENGL : dEQP-GLES31.functional.debug.negative_coverage.callbacks.compute.program_not_active = SKIP
 
 // OPENGL Failing Tests
 1665 WIN NVIDIA OPENGL : dEQP-GLES31.functional.draw_indirect.negative.command_offset_not_in_buffer_unsigned32_wrap = FAIL
@@ -131,9 +110,21 @@
 1442 OPENGL : dEQP-GLES31.functional.program_interface_query.uniform.random.* = FAIL
 1442 OPENGL : dEQP-GLES31.functional.program_interface_query.uniform_block.referenced_by.* = FAIL
 
+// Slow / timeout on Linux GL
+5197 LINUX OPENGL : dEQP-GLES31.functional.compute.indirect_dispatch.gen_in_compute.large_offset = TIMEOUT
+5197 LINUX OPENGL : dEQP-GLES31.functional.compute.indirect_dispatch.gen_in_compute.large_offset_multiple_invocations = TIMEOUT
+
 // OpenGL/D3D11 Failing Tests
 1442 OPENGL : dEQP-GLES31.functional.shaders.opaque_type_indexing.* = FAIL
 1442 D3D11 : dEQP-GLES31.functional.shaders.opaque_type_indexing.* = FAIL
+1442 OPENGL : dEQP-GLES31.functional.separate_shader.* = SKIP
+1442 D3D11 : dEQP-GLES31.functional.separate_shader.* = SKIP
+1442 OPENGL : dEQP-GLES31.functional.state_query.program.program_separable_get_programiv = FAIL
+1442 D3D11 : dEQP-GLES31.functional.state_query.program.program_separable_get_programiv = FAIL
+1442 OPENGL : dEQP-GLES31.functional.state_query.program_pipeline.* = SKIP
+1442 D3D11 : dEQP-GLES31.functional.state_query.program_pipeline.* = SKIP
+
+3584 OPENGL : dEQP-GLES31.functional.shaders.opaque_type_indexing.sampler.*samplercubearray* = PASS
 
 // These tests are failing because of compile errors with SSBOs in compute shaders.
 
@@ -165,25 +156,23 @@
 //// Failures blocking an official GLES 3.1 conformance run on SwiftShader
 ////
 
-// Waiting for Program pipeline functionality
-3570 : dEQP-GLES31.functional.state_query.integer.program_pipeline_binding_* = FAIL
-3570 : dEQP-GLES31.functional.state_query.program.program_separable_get_programiv = FAIL
-3570 : dEQP-GLES31.functional.state_query.program_pipeline.* = SKIP
-3570 : dEQP-GLES31.functional.debug.object_labels.program_pipeline = FAIL
-3570 : dEQP-GLES31.functional.separate_shader.* = FAIL
-
 // Debug (test bug):
 3590 SWIFTSHADER : dEQP-GLES31.functional.debug.negative_coverage.get_error.buffer.framebuffer_texture2d = FAIL
 
-// Front-end query bugs:
-3596 VULKAN : dEQP-GLES31.functional.program_interface_query.shader_storage_block.buffer_data_size.* = FAIL
+// GLSL length() method returning number of bytes in an array instead of number of items
+4098 SWIFTSHADER : dEQP-GLES31.functional.compute.basic.write_multiple_unsized_arr_multiple_groups = FAIL
+4098 SWIFTSHADER : dEQP-GLES31.functional.compute.basic.write_multiple_unsized_arr_single_invocation = FAIL
+
 
 // Not failing in last official run, but failed recently:
 4110 SWIFTSHADER : dEQP-GLES31.functional.shaders.helper_invocation.* = FAIL
 
-// Vulkan doesn't support array of array of opaque uniforms. Emulation is not yet done for images
-3881 VULKAN : dEQP-GLES31.functional.program_interface_query.uniform.location.default_block.array.array.image_2d = SKIP
-3881 VULKAN : dEQP-GLES31.functional.program_interface_query.uniform.location.default_block.array.array.iimage_2d_array = SKIP
+// Vulkan Android doesn't support array of array of opaque uniforms. Emulation is not yet done for images
+3881 VULKAN ANDROID : dEQP-GLES31.functional.program_interface_query.uniform.location.default_block.array.array.image_2d = SKIP
+3881 VULKAN ANDROID : dEQP-GLES31.functional.program_interface_query.uniform.location.default_block.array.array.iimage_2d_array = SKIP
+
+// Flaky crashes in Windows x86 Subzero Reactor
+4482 WIN SWIFTSHADER : dEQP-GLES31.functional.synchronization.inter_invocation.* = SKIP
 
 ////
 //// General Vulkan expectations
@@ -195,11 +184,14 @@
 // Tessellation geometry interaction:
 3572 VULKAN : dEQP-GLES31.functional.tessellation_geometry_interaction.* = FAIL
 
-// Vulkan creates the image view with the same format as the texture.
-3885 VULKAN : dEQP-GLES31.functional.image_load_store.*.format_reinterpret.* = FAIL
-
 // Cannot create 2D (array) view of 3D texture.
 3886 VULKAN : dEQP-GLES31.functional.image_load_store.3d.*layer = FAIL
+
+// Conflict between "interpolateAtOffset()" and the viewport transformation for a default framebuffer
+3589 VULKAN : dEQP-GLES31.functional.shaders.multisample_interpolation.interpolate_at_offset.no_qualifiers.default_framebuffer = FAIL
+3589 VULKAN : dEQP-GLES31.functional.shaders.multisample_interpolation.interpolate_at_offset.centroid_qualifier.default_framebuffer = FAIL
+3589 VULKAN : dEQP-GLES31.functional.shaders.multisample_interpolation.interpolate_at_offset.sample_qualifier.default_framebuffer = FAIL
+3589 VULKAN : dEQP-GLES31.functional.shaders.multisample_interpolation.interpolate_at_offset.array_element.default_framebuffer = FAIL
 
 ////
 //// Android (i.e. Pixel*) Vulkan expectations
@@ -222,9 +214,11 @@
 
 // Passing on recent drivers:
 3726 VULKAN ANDROID : dEQP-GLES31.functional.ssbo.layout.* = FAIL
-3726 VULKAN ANDROID : dEQP-GLES31.functional.atomic_counter.* = FAIL
 3726 VULKAN ANDROID : dEQP-GLES31.functional.synchronization.inter_call.without_memory_barrier.*atomic_counter* = FAIL
 3726 VULKAN ANDROID : dEQP-GLES31.functional.compute.basic.atomic_counter* = FAIL
+
+// Seem to trigger LowMemoryKiller when run in a certain sequence
+5185 VULKAN ANDROID : dEQP-GLES31.functional.atomic_counter.* = SKIP
 
 // Arrays of opaque types as function parameters (possibly related to issue 3882)
 2703 VULKAN ANDROID : dEQP-GLES31.functional.shaders.opaque_type_indexing.atomic_counter.const_literal_vertex = FAIL
@@ -262,8 +256,20 @@
 4371 VULKAN ANDROID : dEQP-GLES31.functional.shaders.implicit_conversions.es31.arithmetic.input_before_literal.add.int_to_uvec3_vertex = FAIL
 4371 SWIFTSHADER : dEQP-GLES31.functional.shaders.implicit_conversions.* = FAIL
 
-// Simultaneous use of GL_CONSTANT_ALPHA/GL_ONE_MINUS_CONSTANT_ALPHA and GL_CONSTANT_COLOR/GL_ONE_MINUS_CONSTANT_COLOR as color factors
-4394 D3D11 : dEQP-GLES31.functional.draw_buffers_indexed.random.max_required_draw_buffers.4 = FAIL
-4394 D3D11 : dEQP-GLES31.functional.draw_buffers_indexed.random.max_required_draw_buffers.7 = FAIL
-4394 D3D11 : dEQP-GLES31.functional.draw_buffers_indexed.random.max_implementation_draw_buffers.9 = FAIL
-4394 D3D11 : dEQP-GLES31.functional.draw_buffers_indexed.random.max_implementation_draw_buffers.15 = FAIL
+// Unexpected crashes on Android 64-bit, some also fail on Android 32-bit
+4822 VULKAN ANDROID : dEQP-GLES31.functional.draw_buffers_indexed.random.max_implementation_draw_buffers.1 = SKIP
+4822 VULKAN ANDROID : dEQP-GLES31.functional.draw_buffers_indexed.random.max_implementation_draw_buffers.3 = SKIP
+4822 VULKAN ANDROID : dEQP-GLES31.functional.draw_buffers_indexed.random.max_implementation_draw_buffers.5 = SKIP
+4822 VULKAN ANDROID : dEQP-GLES31.functional.draw_buffers_indexed.random.max_implementation_draw_buffers.9 = SKIP
+4822 VULKAN ANDROID : dEQP-GLES31.functional.draw_buffers_indexed.random.max_implementation_draw_buffers.10 = SKIP
+4822 VULKAN ANDROID : dEQP-GLES31.functional.draw_buffers_indexed.random.max_implementation_draw_buffers.12 = SKIP
+4822 VULKAN ANDROID : dEQP-GLES31.functional.draw_buffers_indexed.random.max_implementation_draw_buffers.13 = SKIP
+4822 VULKAN ANDROID : dEQP-GLES31.functional.draw_buffers_indexed.random.max_implementation_draw_buffers.14 = SKIP
+4822 VULKAN ANDROID : dEQP-GLES31.functional.draw_buffers_indexed.random.max_implementation_draw_buffers.15 = SKIP
+4822 VULKAN ANDROID : dEQP-GLES31.functional.draw_buffers_indexed.random.max_implementation_draw_buffers.17 = SKIP
+4822 VULKAN ANDROID : dEQP-GLES31.functional.draw_buffers_indexed.random.max_implementation_draw_buffers.18 = SKIP
+4822 VULKAN ANDROID : dEQP-GLES31.functional.draw_buffers_indexed.random.max_required_draw_buffers.0 = SKIP
+4822 VULKAN ANDROID : dEQP-GLES31.functional.draw_buffers_indexed.random.max_required_draw_buffers.2 = SKIP
+4822 VULKAN ANDROID : dEQP-GLES31.functional.draw_buffers_indexed.random.max_required_draw_buffers.10 = SKIP
+4822 VULKAN ANDROID : dEQP-GLES31.functional.draw_buffers_indexed.random.max_required_draw_buffers.11 = SKIP
+4822 VULKAN ANDROID : dEQP-GLES31.functional.draw_buffers_indexed.random.max_required_draw_buffers.17 = SKIP

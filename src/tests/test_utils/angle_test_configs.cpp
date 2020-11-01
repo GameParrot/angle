@@ -112,7 +112,7 @@ std::ostream &operator<<(std::ostream &stream, const PlatformParameters &pp)
             stream << "WGL";
             break;
         case GLESDriverType::SystemEGL:
-            stream << "GLES";
+            stream << "EGL";
             break;
         default:
             stream << "Error";
@@ -202,6 +202,34 @@ std::ostream &operator<<(std::ostream &stream, const PlatformParameters &pp)
     else if (pp.eglParameters.allocateNonZeroMemoryFeature == EGL_TRUE)
     {
         stream << "_AllocateNonZeroMemory";
+    }
+
+    if (pp.eglParameters.emulateCopyTexImage2DFromRenderbuffers == EGL_TRUE)
+    {
+        stream << "_EmulateCopyTexImage2DFromRenderbuffers";
+    }
+
+    if (pp.eglParameters.shaderStencilOutputFeature == EGL_FALSE)
+    {
+        stream << "_NoStencilOutput";
+    }
+
+    if (pp.eglParameters.genMultipleMipsPerPassFeature == EGL_FALSE)
+    {
+        stream << "_NoGenMultipleMipsPerPass";
+    }
+
+    if (pp.eglParameters.emulatedPrerotation == 90)
+    {
+        stream << "_PreRotation90";
+    }
+    else if (pp.eglParameters.emulatedPrerotation == 180)
+    {
+        stream << "_PreRotation180";
+    }
+    else if (pp.eglParameters.emulatedPrerotation == 270)
+    {
+        stream << "_PreRotation270";
     }
 
     return stream;
@@ -768,5 +796,15 @@ PlatformParameters ES2_WGL()
 PlatformParameters ES3_WGL()
 {
     return PlatformParameters(3, 0, GLESDriverType::SystemWGL);
+}
+
+PlatformParameters ES2_EGL()
+{
+    return PlatformParameters(2, 0, GLESDriverType::SystemEGL);
+}
+
+PlatformParameters ES3_EGL()
+{
+    return PlatformParameters(3, 0, GLESDriverType::SystemEGL);
 }
 }  // namespace angle

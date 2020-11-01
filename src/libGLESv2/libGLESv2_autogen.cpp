@@ -2843,6 +2843,23 @@ void GL_APIENTRY glGetRenderbufferImageANGLE(GLenum target,
     return gl::GetRenderbufferImageANGLE(target, format, type, pixels);
 }
 
+// GL_ANGLE_get_tex_level_parameter
+void GL_APIENTRY glGetTexLevelParameterivANGLE(GLenum target,
+                                               GLint level,
+                                               GLenum pname,
+                                               GLint *params)
+{
+    return gl::GetTexLevelParameterivANGLE(target, level, pname, params);
+}
+
+void GL_APIENTRY glGetTexLevelParameterfvANGLE(GLenum target,
+                                               GLint level,
+                                               GLenum pname,
+                                               GLfloat *params)
+{
+    return gl::GetTexLevelParameterfvANGLE(target, level, pname, params);
+}
+
 // GL_ANGLE_instanced_arrays
 void GL_APIENTRY glDrawArraysInstancedANGLE(GLenum mode,
                                             GLint first,
@@ -2864,6 +2881,69 @@ void GL_APIENTRY glDrawElementsInstancedANGLE(GLenum mode,
 void GL_APIENTRY glVertexAttribDivisorANGLE(GLuint index, GLuint divisor)
 {
     return gl::VertexAttribDivisorANGLE(index, divisor);
+}
+
+// GL_ANGLE_memory_object_flags
+void GL_APIENTRY glTexStorageMemFlags2DANGLE(GLenum target,
+                                             GLsizei levels,
+                                             GLenum internalFormat,
+                                             GLsizei width,
+                                             GLsizei height,
+                                             GLuint memory,
+                                             GLuint64 offset,
+                                             GLbitfield createFlags,
+                                             GLbitfield usageFlags)
+{
+    return gl::TexStorageMemFlags2DANGLE(target, levels, internalFormat, width, height, memory,
+                                         offset, createFlags, usageFlags);
+}
+
+void GL_APIENTRY glTexStorageMemFlags2DMultisampleANGLE(GLenum target,
+                                                        GLsizei samples,
+                                                        GLenum internalFormat,
+                                                        GLsizei width,
+                                                        GLsizei height,
+                                                        GLboolean fixedSampleLocations,
+                                                        GLuint memory,
+                                                        GLuint64 offset,
+                                                        GLbitfield createFlags,
+                                                        GLbitfield usageFlags)
+{
+    return gl::TexStorageMemFlags2DMultisampleANGLE(target, samples, internalFormat, width, height,
+                                                    fixedSampleLocations, memory, offset,
+                                                    createFlags, usageFlags);
+}
+
+void GL_APIENTRY glTexStorageMemFlags3DANGLE(GLenum target,
+                                             GLsizei levels,
+                                             GLenum internalFormat,
+                                             GLsizei width,
+                                             GLsizei height,
+                                             GLsizei depth,
+                                             GLuint memory,
+                                             GLuint64 offset,
+                                             GLbitfield createFlags,
+                                             GLbitfield usageFlags)
+{
+    return gl::TexStorageMemFlags3DANGLE(target, levels, internalFormat, width, height, depth,
+                                         memory, offset, createFlags, usageFlags);
+}
+
+void GL_APIENTRY glTexStorageMemFlags3DMultisampleANGLE(GLenum target,
+                                                        GLsizei samples,
+                                                        GLenum internalFormat,
+                                                        GLsizei width,
+                                                        GLsizei height,
+                                                        GLsizei depth,
+                                                        GLboolean fixedSampleLocations,
+                                                        GLuint memory,
+                                                        GLuint64 offset,
+                                                        GLbitfield createFlags,
+                                                        GLbitfield usageFlags)
+{
+    return gl::TexStorageMemFlags3DMultisampleANGLE(target, samples, internalFormat, width, height,
+                                                    depth, fixedSampleLocations, memory, offset,
+                                                    createFlags, usageFlags);
 }
 
 // GL_ANGLE_memory_object_fuchsia
@@ -3611,22 +3691,6 @@ void GL_APIENTRY glTexStorage2DMultisampleANGLE(GLenum target,
                                             fixedsamplelocations);
 }
 
-void GL_APIENTRY glGetTexLevelParameterivANGLE(GLenum target,
-                                               GLint level,
-                                               GLenum pname,
-                                               GLint *params)
-{
-    return gl::GetTexLevelParameterivANGLE(target, level, pname, params);
-}
-
-void GL_APIENTRY glGetTexLevelParameterfvANGLE(GLenum target,
-                                               GLint level,
-                                               GLenum pname,
-                                               GLfloat *params)
-{
-    return gl::GetTexLevelParameterfvANGLE(target, level, pname, params);
-}
-
 void GL_APIENTRY glGetMultisamplefvANGLE(GLenum pname, GLuint index, GLfloat *val)
 {
     return gl::GetMultisamplefvANGLE(pname, index, val);
@@ -3701,204 +3765,13 @@ void GL_APIENTRY glCoverageModulationCHROMIUM(GLenum components)
     return gl::CoverageModulationCHROMIUM(components);
 }
 
-void GL_APIENTRY glMatrixLoadfCHROMIUM(GLenum matrixMode, const GLfloat *matrix)
-{
-    return gl::MatrixLoadfCHROMIUM(matrixMode, matrix);
-}
-
-void GL_APIENTRY glMatrixLoadIdentityCHROMIUM(GLenum matrixMode)
-{
-    return gl::MatrixLoadIdentityCHROMIUM(matrixMode);
-}
-
 // GL_CHROMIUM_lose_context
 void GL_APIENTRY glLoseContextCHROMIUM(GLenum current, GLenum other)
 {
     return gl::LoseContextCHROMIUM(current, other);
 }
 
-// GL_CHROMIUM_path_rendering
-GLuint GL_APIENTRY glGenPathsCHROMIUM(GLsizei range)
-{
-    return gl::GenPathsCHROMIUM(range);
-}
-
-void GL_APIENTRY glDeletePathsCHROMIUM(GLuint first, GLsizei range)
-{
-    return gl::DeletePathsCHROMIUM(first, range);
-}
-
-GLboolean GL_APIENTRY glIsPathCHROMIUM(GLuint path)
-{
-    return gl::IsPathCHROMIUM(path);
-}
-
-void GL_APIENTRY glPathCommandsCHROMIUM(GLuint path,
-                                        GLsizei numCommands,
-                                        const GLubyte *commands,
-                                        GLsizei numCoords,
-                                        GLenum coordType,
-                                        const void *coords)
-{
-    return gl::PathCommandsCHROMIUM(path, numCommands, commands, numCoords, coordType, coords);
-}
-
-void GL_APIENTRY glPathParameterfCHROMIUM(GLuint path, GLenum pname, GLfloat value)
-{
-    return gl::PathParameterfCHROMIUM(path, pname, value);
-}
-
-void GL_APIENTRY glPathParameteriCHROMIUM(GLuint path, GLenum pname, GLint value)
-{
-    return gl::PathParameteriCHROMIUM(path, pname, value);
-}
-
-void GL_APIENTRY glGetPathParameterfvCHROMIUM(GLuint path, GLenum pname, GLfloat *value)
-{
-    return gl::GetPathParameterfvCHROMIUM(path, pname, value);
-}
-
-void GL_APIENTRY glGetPathParameterivCHROMIUM(GLuint path, GLenum pname, GLint *value)
-{
-    return gl::GetPathParameterivCHROMIUM(path, pname, value);
-}
-
-void GL_APIENTRY glPathStencilFuncCHROMIUM(GLenum func, GLint ref, GLuint mask)
-{
-    return gl::PathStencilFuncCHROMIUM(func, ref, mask);
-}
-
-void GL_APIENTRY glStencilFillPathCHROMIUM(GLuint path, GLenum fillMode, GLuint mask)
-{
-    return gl::StencilFillPathCHROMIUM(path, fillMode, mask);
-}
-
-void GL_APIENTRY glStencilStrokePathCHROMIUM(GLuint path, GLint reference, GLuint mask)
-{
-    return gl::StencilStrokePathCHROMIUM(path, reference, mask);
-}
-
-void GL_APIENTRY glCoverFillPathCHROMIUM(GLuint path, GLenum coverMode)
-{
-    return gl::CoverFillPathCHROMIUM(path, coverMode);
-}
-
-void GL_APIENTRY glCoverStrokePathCHROMIUM(GLuint path, GLenum coverMode)
-{
-    return gl::CoverStrokePathCHROMIUM(path, coverMode);
-}
-
-void GL_APIENTRY glStencilThenCoverFillPathCHROMIUM(GLuint path,
-                                                    GLenum fillMode,
-                                                    GLuint mask,
-                                                    GLenum coverMode)
-{
-    return gl::StencilThenCoverFillPathCHROMIUM(path, fillMode, mask, coverMode);
-}
-
-void GL_APIENTRY glStencilThenCoverStrokePathCHROMIUM(GLuint path,
-                                                      GLint reference,
-                                                      GLuint mask,
-                                                      GLenum coverMode)
-{
-    return gl::StencilThenCoverStrokePathCHROMIUM(path, reference, mask, coverMode);
-}
-
-void GL_APIENTRY glCoverFillPathInstancedCHROMIUM(GLsizei numPath,
-                                                  GLenum pathNameType,
-                                                  const void *paths,
-                                                  GLuint pathBase,
-                                                  GLenum coverMode,
-                                                  GLenum transformType,
-                                                  const GLfloat *transformValues)
-{
-    return gl::CoverFillPathInstancedCHROMIUM(numPath, pathNameType, paths, pathBase, coverMode,
-                                              transformType, transformValues);
-}
-
-void GL_APIENTRY glCoverStrokePathInstancedCHROMIUM(GLsizei numPath,
-                                                    GLenum pathNameType,
-                                                    const void *paths,
-                                                    GLuint pathBase,
-                                                    GLenum coverMode,
-                                                    GLenum transformType,
-                                                    const GLfloat *transformValues)
-{
-    return gl::CoverStrokePathInstancedCHROMIUM(numPath, pathNameType, paths, pathBase, coverMode,
-                                                transformType, transformValues);
-}
-
-void GL_APIENTRY glStencilStrokePathInstancedCHROMIUM(GLsizei numPath,
-                                                      GLenum pathNameType,
-                                                      const void *paths,
-                                                      GLuint pathBase,
-                                                      GLint reference,
-                                                      GLuint mask,
-                                                      GLenum transformType,
-                                                      const GLfloat *transformValues)
-{
-    return gl::StencilStrokePathInstancedCHROMIUM(numPath, pathNameType, paths, pathBase, reference,
-                                                  mask, transformType, transformValues);
-}
-
-void GL_APIENTRY glStencilFillPathInstancedCHROMIUM(GLsizei numPaths,
-                                                    GLenum pathNameType,
-                                                    const void *paths,
-                                                    GLuint pathBase,
-                                                    GLenum fillMode,
-                                                    GLuint mask,
-                                                    GLenum transformType,
-                                                    const GLfloat *transformValues)
-{
-    return gl::StencilFillPathInstancedCHROMIUM(numPaths, pathNameType, paths, pathBase, fillMode,
-                                                mask, transformType, transformValues);
-}
-
-void GL_APIENTRY glStencilThenCoverFillPathInstancedCHROMIUM(GLsizei numPaths,
-                                                             GLenum pathNameType,
-                                                             const void *paths,
-                                                             GLuint pathBase,
-                                                             GLenum fillMode,
-                                                             GLuint mask,
-                                                             GLenum coverMode,
-                                                             GLenum transformType,
-                                                             const GLfloat *transformValues)
-{
-    return gl::StencilThenCoverFillPathInstancedCHROMIUM(numPaths, pathNameType, paths, pathBase,
-                                                         fillMode, mask, coverMode, transformType,
-                                                         transformValues);
-}
-
-void GL_APIENTRY glStencilThenCoverStrokePathInstancedCHROMIUM(GLsizei numPaths,
-                                                               GLenum pathNameType,
-                                                               const void *paths,
-                                                               GLuint pathBase,
-                                                               GLint reference,
-                                                               GLuint mask,
-                                                               GLenum coverMode,
-                                                               GLenum transformType,
-                                                               const GLfloat *transformValues)
-{
-    return gl::StencilThenCoverStrokePathInstancedCHROMIUM(numPaths, pathNameType, paths, pathBase,
-                                                           reference, mask, coverMode,
-                                                           transformType, transformValues);
-}
-
-void GL_APIENTRY glBindFragmentInputLocationCHROMIUM(GLuint programs,
-                                                     GLint location,
-                                                     const GLchar *name)
-{
-    return gl::BindFragmentInputLocationCHROMIUM(programs, location, name);
-}
-
-void GL_APIENTRY glProgramPathFragmentInputGenCHROMIUM(GLuint program,
-                                                       GLint location,
-                                                       GLenum genMode,
-                                                       GLint components,
-                                                       const GLfloat *coeffs)
-{
-    return gl::ProgramPathFragmentInputGenCHROMIUM(program, location, genMode, components, coeffs);
-}
+// GL_EXT_EGL_image_array
 
 // GL_EXT_blend_func_extended
 void GL_APIENTRY glBindFragDataLocationEXT(GLuint program, GLuint color, const GLchar *name)
@@ -3924,6 +3797,37 @@ GLint GL_APIENTRY glGetProgramResourceLocationIndexEXT(GLuint program,
                                                        const GLchar *name)
 {
     return gl::GetProgramResourceLocationIndexEXT(program, programInterface, name);
+}
+
+// GL_EXT_buffer_storage
+void GL_APIENTRY glBufferStorageEXT(GLenum target,
+                                    GLsizeiptr size,
+                                    const void *data,
+                                    GLbitfield flags)
+{
+    return gl::BufferStorageEXT(target, size, data, flags);
+}
+
+// GL_EXT_copy_image
+void GL_APIENTRY glCopyImageSubDataEXT(GLuint srcName,
+                                       GLenum srcTarget,
+                                       GLint srcLevel,
+                                       GLint srcX,
+                                       GLint srcY,
+                                       GLint srcZ,
+                                       GLuint dstName,
+                                       GLenum dstTarget,
+                                       GLint dstLevel,
+                                       GLint dstX,
+                                       GLint dstY,
+                                       GLint dstZ,
+                                       GLsizei srcWidth,
+                                       GLsizei srcHeight,
+                                       GLsizei srcDepth)
+{
+    return gl::CopyImageSubDataEXT(srcName, srcTarget, srcLevel, srcX, srcY, srcZ, dstName,
+                                   dstTarget, dstLevel, dstX, dstY, dstZ, srcWidth, srcHeight,
+                                   srcDepth);
 }
 
 // GL_EXT_debug_marker
@@ -4364,6 +4268,21 @@ void GL_APIENTRY glImportSemaphoreFdEXT(GLuint semaphore, GLenum handleType, GLi
     return gl::ImportSemaphoreFdEXT(semaphore, handleType, fd);
 }
 
+// GL_EXT_texture_buffer
+void GL_APIENTRY glTexBufferEXT(GLenum target, GLenum internalformat, GLuint buffer)
+{
+    return gl::TexBufferEXT(target, internalformat, buffer);
+}
+
+void GL_APIENTRY glTexBufferRangeEXT(GLenum target,
+                                     GLenum internalformat,
+                                     GLuint buffer,
+                                     GLintptr offset,
+                                     GLsizeiptr size)
+{
+    return gl::TexBufferRangeEXT(target, internalformat, buffer, offset, size);
+}
+
 // GL_EXT_texture_compression_bptc
 
 // GL_EXT_texture_compression_dxt1
@@ -4374,9 +4293,13 @@ void GL_APIENTRY glImportSemaphoreFdEXT(GLuint semaphore, GLenum handleType, GLi
 
 // GL_EXT_texture_compression_s3tc_srgb
 
+// GL_EXT_texture_cube_map_array
+
 // GL_EXT_texture_filter_anisotropic
 
 // GL_EXT_texture_format_BGRA8888
+
+// GL_EXT_texture_sRGB_R8
 
 // GL_EXT_texture_storage
 void GL_APIENTRY glTexStorage1DEXT(GLenum target,
@@ -4544,6 +4467,28 @@ void GL_APIENTRY glEGLImageTargetTexture2DOES(GLenum target, GLeglImageOES image
 }
 
 // GL_OES_compressed_ETC1_RGB8_texture
+
+// GL_OES_copy_image
+void GL_APIENTRY glCopyImageSubDataOES(GLuint srcName,
+                                       GLenum srcTarget,
+                                       GLint srcLevel,
+                                       GLint srcX,
+                                       GLint srcY,
+                                       GLint srcZ,
+                                       GLuint dstName,
+                                       GLenum dstTarget,
+                                       GLint dstLevel,
+                                       GLint dstX,
+                                       GLint dstY,
+                                       GLint dstZ,
+                                       GLsizei srcWidth,
+                                       GLsizei srcHeight,
+                                       GLsizei srcDepth)
+{
+    return gl::CopyImageSubDataOES(srcName, srcTarget, srcLevel, srcX, srcY, srcZ, dstName,
+                                   dstTarget, dstLevel, dstX, dstY, dstZ, srcWidth, srcHeight,
+                                   srcDepth);
+}
 
 // GL_OES_depth32
 
@@ -4821,6 +4766,12 @@ GLbitfield GL_APIENTRY glQueryMatrixxOES(GLfixed *mantissa, GLint *exponent)
     return gl::QueryMatrixxOES(mantissa, exponent);
 }
 
+// GL_OES_sample_shading
+void GL_APIENTRY glMinSampleShadingOES(GLfloat value)
+{
+    return gl::MinSampleShadingOES(value);
+}
+
 // GL_OES_texture_3D
 void GL_APIENTRY glCompressedTexImage3DOES(GLenum target,
                                            GLint level,
@@ -4947,6 +4898,21 @@ void GL_APIENTRY glTexParameterIuivOES(GLenum target, GLenum pname, const GLuint
     return gl::TexParameterIuivOES(target, pname, params);
 }
 
+// GL_OES_texture_buffer
+void GL_APIENTRY glTexBufferOES(GLenum target, GLenum internalformat, GLuint buffer)
+{
+    return gl::TexBufferOES(target, internalformat, buffer);
+}
+
+void GL_APIENTRY glTexBufferRangeOES(GLenum target,
+                                     GLenum internalformat,
+                                     GLuint buffer,
+                                     GLintptr offset,
+                                     GLsizeiptr size)
+{
+    return gl::TexBufferRangeOES(target, internalformat, buffer, offset, size);
+}
+
 // GL_OES_texture_cube_map
 void GL_APIENTRY glGetTexGenfvOES(GLenum coord, GLenum pname, GLfloat *params)
 {
@@ -4993,7 +4959,11 @@ void GL_APIENTRY glTexGenxvOES(GLenum coord, GLenum pname, const GLfixed *params
     return gl::TexGenxvOES(coord, pname, params);
 }
 
+// GL_OES_texture_cube_map_array
+
 // GL_OES_texture_half_float
+
+// GL_OES_texture_stencil8
 
 // GL_OES_texture_storage_multisample_2d_array
 void GL_APIENTRY glTexStorage3DMultisampleOES(GLenum target,
@@ -5375,6 +5345,15 @@ void GL_APIENTRY glBufferDataContextANGLE(GLeglContext ctx,
     return gl::BufferDataContextANGLE(ctx, target, size, data, usage);
 }
 
+void GL_APIENTRY glBufferStorageEXTContextANGLE(GLeglContext ctx,
+                                                GLenum target,
+                                                GLsizeiptr size,
+                                                const void *data,
+                                                GLbitfield flags)
+{
+    return gl::BufferStorageEXTContextANGLE(ctx, target, size, data, flags);
+}
+
 void GL_APIENTRY glBufferStorageMemEXTContextANGLE(GLeglContext ctx,
                                                    GLenum target,
                                                    GLsizeiptr size,
@@ -5687,6 +5666,50 @@ void GL_APIENTRY glCopyImageSubDataContextANGLE(GLeglContext ctx,
     return gl::CopyImageSubDataContextANGLE(ctx, srcName, srcTarget, srcLevel, srcX, srcY, srcZ,
                                             dstName, dstTarget, dstLevel, dstX, dstY, dstZ,
                                             srcWidth, srcHeight, srcDepth);
+}
+
+void GL_APIENTRY glCopyImageSubDataEXTContextANGLE(GLeglContext ctx,
+                                                   GLuint srcName,
+                                                   GLenum srcTarget,
+                                                   GLint srcLevel,
+                                                   GLint srcX,
+                                                   GLint srcY,
+                                                   GLint srcZ,
+                                                   GLuint dstName,
+                                                   GLenum dstTarget,
+                                                   GLint dstLevel,
+                                                   GLint dstX,
+                                                   GLint dstY,
+                                                   GLint dstZ,
+                                                   GLsizei srcWidth,
+                                                   GLsizei srcHeight,
+                                                   GLsizei srcDepth)
+{
+    return gl::CopyImageSubDataEXTContextANGLE(ctx, srcName, srcTarget, srcLevel, srcX, srcY, srcZ,
+                                               dstName, dstTarget, dstLevel, dstX, dstY, dstZ,
+                                               srcWidth, srcHeight, srcDepth);
+}
+
+void GL_APIENTRY glCopyImageSubDataOESContextANGLE(GLeglContext ctx,
+                                                   GLuint srcName,
+                                                   GLenum srcTarget,
+                                                   GLint srcLevel,
+                                                   GLint srcX,
+                                                   GLint srcY,
+                                                   GLint srcZ,
+                                                   GLuint dstName,
+                                                   GLenum dstTarget,
+                                                   GLint dstLevel,
+                                                   GLint dstX,
+                                                   GLint dstY,
+                                                   GLint dstZ,
+                                                   GLsizei srcWidth,
+                                                   GLsizei srcHeight,
+                                                   GLsizei srcDepth)
+{
+    return gl::CopyImageSubDataOESContextANGLE(ctx, srcName, srcTarget, srcLevel, srcX, srcY, srcZ,
+                                               dstName, dstTarget, dstLevel, dstX, dstY, dstZ,
+                                               srcWidth, srcHeight, srcDepth);
 }
 
 void GL_APIENTRY glCopyTexImage2DContextANGLE(GLeglContext ctx,
@@ -7936,6 +7959,11 @@ void GL_APIENTRY glMinSampleShadingContextANGLE(GLeglContext ctx, GLfloat value)
     return gl::MinSampleShadingContextANGLE(ctx, value);
 }
 
+void GL_APIENTRY glMinSampleShadingOESContextANGLE(GLeglContext ctx, GLfloat value)
+{
+    return gl::MinSampleShadingOESContextANGLE(ctx, value);
+}
+
 void GL_APIENTRY glMultMatrixfContextANGLE(GLeglContext ctx, const GLfloat *m)
 {
     return gl::MultMatrixfContextANGLE(ctx, m);
@@ -8847,6 +8875,22 @@ void GL_APIENTRY glTexBufferContextANGLE(GLeglContext ctx,
     return gl::TexBufferContextANGLE(ctx, target, internalformat, buffer);
 }
 
+void GL_APIENTRY glTexBufferEXTContextANGLE(GLeglContext ctx,
+                                            GLenum target,
+                                            GLenum internalformat,
+                                            GLuint buffer)
+{
+    return gl::TexBufferEXTContextANGLE(ctx, target, internalformat, buffer);
+}
+
+void GL_APIENTRY glTexBufferOESContextANGLE(GLeglContext ctx,
+                                            GLenum target,
+                                            GLenum internalformat,
+                                            GLuint buffer)
+{
+    return gl::TexBufferOESContextANGLE(ctx, target, internalformat, buffer);
+}
+
 void GL_APIENTRY glTexBufferRangeContextANGLE(GLeglContext ctx,
                                               GLenum target,
                                               GLenum internalformat,
@@ -8855,6 +8899,26 @@ void GL_APIENTRY glTexBufferRangeContextANGLE(GLeglContext ctx,
                                               GLsizeiptr size)
 {
     return gl::TexBufferRangeContextANGLE(ctx, target, internalformat, buffer, offset, size);
+}
+
+void GL_APIENTRY glTexBufferRangeEXTContextANGLE(GLeglContext ctx,
+                                                 GLenum target,
+                                                 GLenum internalformat,
+                                                 GLuint buffer,
+                                                 GLintptr offset,
+                                                 GLsizeiptr size)
+{
+    return gl::TexBufferRangeEXTContextANGLE(ctx, target, internalformat, buffer, offset, size);
+}
+
+void GL_APIENTRY glTexBufferRangeOESContextANGLE(GLeglContext ctx,
+                                                 GLenum target,
+                                                 GLenum internalformat,
+                                                 GLuint buffer,
+                                                 GLintptr offset,
+                                                 GLsizeiptr size)
+{
+    return gl::TexBufferRangeOESContextANGLE(ctx, target, internalformat, buffer, offset, size);
 }
 
 void GL_APIENTRY glTexCoordPointerContextANGLE(GLeglContext ctx,
@@ -9786,243 +9850,6 @@ void GL_APIENTRY glBindUniformLocationCHROMIUMContextANGLE(GLeglContext ctx,
 void GL_APIENTRY glCoverageModulationCHROMIUMContextANGLE(GLeglContext ctx, GLenum components)
 {
     return gl::CoverageModulationCHROMIUMContextANGLE(ctx, components);
-}
-
-void GL_APIENTRY glMatrixLoadfCHROMIUMContextANGLE(GLeglContext ctx,
-                                                   GLenum matrixMode,
-                                                   const GLfloat *matrix)
-{
-    return gl::MatrixLoadfCHROMIUMContextANGLE(ctx, matrixMode, matrix);
-}
-
-void GL_APIENTRY glMatrixLoadIdentityCHROMIUMContextANGLE(GLeglContext ctx, GLenum matrixMode)
-{
-    return gl::MatrixLoadIdentityCHROMIUMContextANGLE(ctx, matrixMode);
-}
-
-GLuint GL_APIENTRY glGenPathsCHROMIUMContextANGLE(GLeglContext ctx, GLsizei range)
-{
-    return gl::GenPathsCHROMIUMContextANGLE(ctx, range);
-}
-
-void GL_APIENTRY glDeletePathsCHROMIUMContextANGLE(GLeglContext ctx, GLuint first, GLsizei range)
-{
-    return gl::DeletePathsCHROMIUMContextANGLE(ctx, first, range);
-}
-
-GLboolean GL_APIENTRY glIsPathCHROMIUMContextANGLE(GLeglContext ctx, GLuint path)
-{
-    return gl::IsPathCHROMIUMContextANGLE(ctx, path);
-}
-
-void GL_APIENTRY glPathCommandsCHROMIUMContextANGLE(GLeglContext ctx,
-                                                    GLuint path,
-                                                    GLsizei numCommands,
-                                                    const GLubyte *commands,
-                                                    GLsizei numCoords,
-                                                    GLenum coordType,
-                                                    const void *coords)
-{
-    return gl::PathCommandsCHROMIUMContextANGLE(ctx, path, numCommands, commands, numCoords,
-                                                coordType, coords);
-}
-
-void GL_APIENTRY glPathParameterfCHROMIUMContextANGLE(GLeglContext ctx,
-                                                      GLuint path,
-                                                      GLenum pname,
-                                                      GLfloat value)
-{
-    return gl::PathParameterfCHROMIUMContextANGLE(ctx, path, pname, value);
-}
-
-void GL_APIENTRY glPathParameteriCHROMIUMContextANGLE(GLeglContext ctx,
-                                                      GLuint path,
-                                                      GLenum pname,
-                                                      GLint value)
-{
-    return gl::PathParameteriCHROMIUMContextANGLE(ctx, path, pname, value);
-}
-
-void GL_APIENTRY glGetPathParameterfvCHROMIUMContextANGLE(GLeglContext ctx,
-                                                          GLuint path,
-                                                          GLenum pname,
-                                                          GLfloat *value)
-{
-    return gl::GetPathParameterfvCHROMIUMContextANGLE(ctx, path, pname, value);
-}
-
-void GL_APIENTRY glGetPathParameterivCHROMIUMContextANGLE(GLeglContext ctx,
-                                                          GLuint path,
-                                                          GLenum pname,
-                                                          GLint *value)
-{
-    return gl::GetPathParameterivCHROMIUMContextANGLE(ctx, path, pname, value);
-}
-
-void GL_APIENTRY glPathStencilFuncCHROMIUMContextANGLE(GLeglContext ctx,
-                                                       GLenum func,
-                                                       GLint ref,
-                                                       GLuint mask)
-{
-    return gl::PathStencilFuncCHROMIUMContextANGLE(ctx, func, ref, mask);
-}
-
-void GL_APIENTRY glStencilFillPathCHROMIUMContextANGLE(GLeglContext ctx,
-                                                       GLuint path,
-                                                       GLenum fillMode,
-                                                       GLuint mask)
-{
-    return gl::StencilFillPathCHROMIUMContextANGLE(ctx, path, fillMode, mask);
-}
-
-void GL_APIENTRY glStencilStrokePathCHROMIUMContextANGLE(GLeglContext ctx,
-                                                         GLuint path,
-                                                         GLint reference,
-                                                         GLuint mask)
-{
-    return gl::StencilStrokePathCHROMIUMContextANGLE(ctx, path, reference, mask);
-}
-
-void GL_APIENTRY glCoverFillPathCHROMIUMContextANGLE(GLeglContext ctx,
-                                                     GLuint path,
-                                                     GLenum coverMode)
-{
-    return gl::CoverFillPathCHROMIUMContextANGLE(ctx, path, coverMode);
-}
-
-void GL_APIENTRY glCoverStrokePathCHROMIUMContextANGLE(GLeglContext ctx,
-                                                       GLuint path,
-                                                       GLenum coverMode)
-{
-    return gl::CoverStrokePathCHROMIUMContextANGLE(ctx, path, coverMode);
-}
-
-void GL_APIENTRY glStencilThenCoverFillPathCHROMIUMContextANGLE(GLeglContext ctx,
-                                                                GLuint path,
-                                                                GLenum fillMode,
-                                                                GLuint mask,
-                                                                GLenum coverMode)
-{
-    return gl::StencilThenCoverFillPathCHROMIUMContextANGLE(ctx, path, fillMode, mask, coverMode);
-}
-
-void GL_APIENTRY glStencilThenCoverStrokePathCHROMIUMContextANGLE(GLeglContext ctx,
-                                                                  GLuint path,
-                                                                  GLint reference,
-                                                                  GLuint mask,
-                                                                  GLenum coverMode)
-{
-    return gl::StencilThenCoverStrokePathCHROMIUMContextANGLE(ctx, path, reference, mask,
-                                                              coverMode);
-}
-
-void GL_APIENTRY glCoverFillPathInstancedCHROMIUMContextANGLE(GLeglContext ctx,
-                                                              GLsizei numPath,
-                                                              GLenum pathNameType,
-                                                              const void *paths,
-                                                              GLuint pathBase,
-                                                              GLenum coverMode,
-                                                              GLenum transformType,
-                                                              const GLfloat *transformValues)
-{
-    return gl::CoverFillPathInstancedCHROMIUMContextANGLE(
-        ctx, numPath, pathNameType, paths, pathBase, coverMode, transformType, transformValues);
-}
-
-void GL_APIENTRY glCoverStrokePathInstancedCHROMIUMContextANGLE(GLeglContext ctx,
-                                                                GLsizei numPath,
-                                                                GLenum pathNameType,
-                                                                const void *paths,
-                                                                GLuint pathBase,
-                                                                GLenum coverMode,
-                                                                GLenum transformType,
-                                                                const GLfloat *transformValues)
-{
-    return gl::CoverStrokePathInstancedCHROMIUMContextANGLE(
-        ctx, numPath, pathNameType, paths, pathBase, coverMode, transformType, transformValues);
-}
-
-void GL_APIENTRY glStencilStrokePathInstancedCHROMIUMContextANGLE(GLeglContext ctx,
-                                                                  GLsizei numPath,
-                                                                  GLenum pathNameType,
-                                                                  const void *paths,
-                                                                  GLuint pathBase,
-                                                                  GLint reference,
-                                                                  GLuint mask,
-                                                                  GLenum transformType,
-                                                                  const GLfloat *transformValues)
-{
-    return gl::StencilStrokePathInstancedCHROMIUMContextANGLE(ctx, numPath, pathNameType, paths,
-                                                              pathBase, reference, mask,
-                                                              transformType, transformValues);
-}
-
-void GL_APIENTRY glStencilFillPathInstancedCHROMIUMContextANGLE(GLeglContext ctx,
-                                                                GLsizei numPaths,
-                                                                GLenum pathNameType,
-                                                                const void *paths,
-                                                                GLuint pathBase,
-                                                                GLenum fillMode,
-                                                                GLuint mask,
-                                                                GLenum transformType,
-                                                                const GLfloat *transformValues)
-{
-    return gl::StencilFillPathInstancedCHROMIUMContextANGLE(ctx, numPaths, pathNameType, paths,
-                                                            pathBase, fillMode, mask, transformType,
-                                                            transformValues);
-}
-
-void GL_APIENTRY
-glStencilThenCoverFillPathInstancedCHROMIUMContextANGLE(GLeglContext ctx,
-                                                        GLsizei numPaths,
-                                                        GLenum pathNameType,
-                                                        const void *paths,
-                                                        GLuint pathBase,
-                                                        GLenum fillMode,
-                                                        GLuint mask,
-                                                        GLenum coverMode,
-                                                        GLenum transformType,
-                                                        const GLfloat *transformValues)
-{
-    return gl::StencilThenCoverFillPathInstancedCHROMIUMContextANGLE(
-        ctx, numPaths, pathNameType, paths, pathBase, fillMode, mask, coverMode, transformType,
-        transformValues);
-}
-
-void GL_APIENTRY
-glStencilThenCoverStrokePathInstancedCHROMIUMContextANGLE(GLeglContext ctx,
-                                                          GLsizei numPaths,
-                                                          GLenum pathNameType,
-                                                          const void *paths,
-                                                          GLuint pathBase,
-                                                          GLint reference,
-                                                          GLuint mask,
-                                                          GLenum coverMode,
-                                                          GLenum transformType,
-                                                          const GLfloat *transformValues)
-{
-    return gl::StencilThenCoverStrokePathInstancedCHROMIUMContextANGLE(
-        ctx, numPaths, pathNameType, paths, pathBase, reference, mask, coverMode, transformType,
-        transformValues);
-}
-
-void GL_APIENTRY glBindFragmentInputLocationCHROMIUMContextANGLE(GLeglContext ctx,
-                                                                 GLuint programs,
-                                                                 GLint location,
-                                                                 const GLchar *name)
-{
-    return gl::BindFragmentInputLocationCHROMIUMContextANGLE(ctx, programs, location, name);
-}
-
-void GL_APIENTRY glProgramPathFragmentInputGenCHROMIUMContextANGLE(GLeglContext ctx,
-                                                                   GLuint program,
-                                                                   GLint location,
-                                                                   GLenum genMode,
-                                                                   GLint components,
-                                                                   const GLfloat *coeffs)
-{
-    return gl::ProgramPathFragmentInputGenCHROMIUMContextANGLE(ctx, program, location, genMode,
-                                                               components, coeffs);
 }
 
 void GL_APIENTRY glCopyTextureCHROMIUMContextANGLE(GLeglContext ctx,
@@ -11035,6 +10862,74 @@ void GL_APIENTRY glGetRenderbufferImageANGLEContextANGLE(GLeglContext ctx,
                                                          void *pixels)
 {
     return gl::GetRenderbufferImageANGLEContextANGLE(ctx, target, format, type, pixels);
+}
+
+void GL_APIENTRY glTexStorageMemFlags2DANGLEContextANGLE(GLeglContext ctx,
+                                                         GLenum target,
+                                                         GLsizei levels,
+                                                         GLenum internalFormat,
+                                                         GLsizei width,
+                                                         GLsizei height,
+                                                         GLuint memory,
+                                                         GLuint64 offset,
+                                                         GLbitfield createFlags,
+                                                         GLbitfield usageFlags)
+{
+    return gl::TexStorageMemFlags2DANGLEContextANGLE(ctx, target, levels, internalFormat, width,
+                                                     height, memory, offset, createFlags,
+                                                     usageFlags);
+}
+
+void GL_APIENTRY glTexStorageMemFlags2DMultisampleANGLEContextANGLE(GLeglContext ctx,
+                                                                    GLenum target,
+                                                                    GLsizei samples,
+                                                                    GLenum internalFormat,
+                                                                    GLsizei width,
+                                                                    GLsizei height,
+                                                                    GLboolean fixedSampleLocations,
+                                                                    GLuint memory,
+                                                                    GLuint64 offset,
+                                                                    GLbitfield createFlags,
+                                                                    GLbitfield usageFlags)
+{
+    return gl::TexStorageMemFlags2DMultisampleANGLEContextANGLE(
+        ctx, target, samples, internalFormat, width, height, fixedSampleLocations, memory, offset,
+        createFlags, usageFlags);
+}
+
+void GL_APIENTRY glTexStorageMemFlags3DANGLEContextANGLE(GLeglContext ctx,
+                                                         GLenum target,
+                                                         GLsizei levels,
+                                                         GLenum internalFormat,
+                                                         GLsizei width,
+                                                         GLsizei height,
+                                                         GLsizei depth,
+                                                         GLuint memory,
+                                                         GLuint64 offset,
+                                                         GLbitfield createFlags,
+                                                         GLbitfield usageFlags)
+{
+    return gl::TexStorageMemFlags3DANGLEContextANGLE(ctx, target, levels, internalFormat, width,
+                                                     height, depth, memory, offset, createFlags,
+                                                     usageFlags);
+}
+
+void GL_APIENTRY glTexStorageMemFlags3DMultisampleANGLEContextANGLE(GLeglContext ctx,
+                                                                    GLenum target,
+                                                                    GLsizei samples,
+                                                                    GLenum internalFormat,
+                                                                    GLsizei width,
+                                                                    GLsizei height,
+                                                                    GLsizei depth,
+                                                                    GLboolean fixedSampleLocations,
+                                                                    GLuint memory,
+                                                                    GLuint64 offset,
+                                                                    GLbitfield createFlags,
+                                                                    GLbitfield usageFlags)
+{
+    return gl::TexStorageMemFlags3DMultisampleANGLEContextANGLE(
+        ctx, target, samples, internalFormat, width, height, depth, fixedSampleLocations, memory,
+        offset, createFlags, usageFlags);
 }
 
 void GL_APIENTRY glImportMemoryZirconHandleANGLEContextANGLE(GLeglContext ctx,

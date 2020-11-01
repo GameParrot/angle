@@ -164,11 +164,13 @@ WindowSurfaceCGL::WindowSurfaceCGL(const egl::SurfaceState &state,
 
 WindowSurfaceCGL::~WindowSurfaceCGL()
 {
+    EnsureCGLContextIsCurrent ensureContextCurrent(mContext);
+
     pthread_mutex_destroy(&mSwapState.mutex);
 
     if (mDSRenderbuffer != 0)
     {
-        mFunctions->deleteRenderbuffers(1, &mDSRenderbuffer);
+        mStateManager->deleteRenderbuffer(mDSRenderbuffer);
         mDSRenderbuffer = 0;
     }
 
@@ -183,7 +185,7 @@ WindowSurfaceCGL::~WindowSurfaceCGL()
     {
         if (mSwapState.textures[i].texture != 0)
         {
-            mFunctions->deleteTextures(1, &mSwapState.textures[i].texture);
+            mStateManager->deleteTexture(mSwapState.textures[i].texture);
             mSwapState.textures[i].texture = 0;
         }
     }
@@ -191,6 +193,8 @@ WindowSurfaceCGL::~WindowSurfaceCGL()
 
 egl::Error WindowSurfaceCGL::initialize(const egl::Display *display)
 {
+    EnsureCGLContextIsCurrent ensureContextCurrent(mContext);
+
     unsigned width  = getWidth();
     unsigned height = getHeight();
 
@@ -213,6 +217,7 @@ egl::Error WindowSurfaceCGL::initialize(const egl::Display *display)
                                              withFunctions:mFunctions];
     mSwapLayer.contentsScale = mLayer.contentsScale;
     [mLayer addSublayer:mSwapLayer];
+    [mSwapLayer setContentsScale:[mLayer contentsScale]];
 
     mFunctions->genRenderbuffers(1, &mDSRenderbuffer);
     mStateManager->bindRenderbuffer(GL_RENDERBUFFER, mDSRenderbuffer);
@@ -303,12 +308,12 @@ void WindowSurfaceCGL::setSwapInterval(EGLint interval)
 
 EGLint WindowSurfaceCGL::getWidth() const
 {
-    return (EGLint)(CGRectGetWidth([mLayer frame]) * mLayer.contentsScale);
+    return static_cast<EGLint>(CGRectGetWidth([mLayer frame]) * [mLayer contentsScale]);
 }
 
 EGLint WindowSurfaceCGL::getHeight() const
 {
-    return (EGLint)(CGRectGetHeight([mLayer frame]) * mLayer.contentsScale);
+    return static_cast<EGLint>(CGRectGetHeight([mLayer frame]) * [mLayer contentsScale]);
 }
 
 EGLint WindowSurfaceCGL::isPostSubBufferSupported() const

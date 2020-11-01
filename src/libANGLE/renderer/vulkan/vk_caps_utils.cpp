@@ -27,6 +27,136 @@ constexpr unsigned int kComponentsPerVector = 4;
 namespace rx
 {
 
+namespace vk
+{
+namespace
+{
+bool FormatReinterpretationSupported(const std::vector<GLenum> &optionalSizedFormats,
+                                     const RendererVk *rendererVk,
+                                     bool checkLinearColorspace)
+{
+    for (GLenum glFormat : optionalSizedFormats)
+    {
+        const gl::TextureCaps &baseCaps = rendererVk->getNativeTextureCaps().get(glFormat);
+        if (baseCaps.texturable && baseCaps.filterable)
+        {
+            const vk::Format &vkFormat = rendererVk->getFormat(glFormat);
+
+            VkFormat reinterpretedFormat = checkLinearColorspace
+                                               ? vk::ConvertToLinear(vkFormat.vkImageFormat)
+                                               : vk::ConvertToSRGB(vkFormat.vkImageFormat);
+            ASSERT(reinterpretedFormat != VK_FORMAT_UNDEFINED);
+
+            constexpr uint32_t kBitsSampleFilter =
+                VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT |
+                VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT;
+
+            if (!rendererVk->hasImageFormatFeatureBits(reinterpretedFormat, kBitsSampleFilter))
+            {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+bool GetTextureSRGBDecodeSupport(const RendererVk *rendererVk)
+{
+    static constexpr bool kLinearColorspace = true;
+
+    // GL_SRGB and GL_SRGB_ALPHA unsized formats are also required by the spec, but the only valid
+    // type for them is GL_UNSIGNED_BYTE, so they are fully included in the sized formats listed
+    // here
+    std::vector<GLenum> optionalSizedSRGBFormats = {
+        GL_SRGB8,
+        GL_SRGB8_ALPHA8_EXT,
+        GL_COMPRESSED_SRGB_S3TC_DXT1_EXT,
+        GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT1_EXT,
+        GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT3_EXT,
+        GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT5_EXT,
+    };
+
+    if (!FormatReinterpretationSupported(optionalSizedSRGBFormats, rendererVk, kLinearColorspace))
+    {
+        return false;
+    }
+
+    return true;
+}
+
+bool GetTextureSRGBOverrideSupport(const RendererVk *rendererVk,
+                                   const gl::Extensions &supportedExtensions)
+{
+    static constexpr bool kNonLinearColorspace = false;
+
+    // If the given linear format is supported, we also need to support its corresponding nonlinear
+    // format. If the given linear format is NOT supported, we don't care about its corresponding
+    // nonlinear format.
+    std::vector<GLenum> optionalLinearFormats     = {GL_RGB8,
+                                                 GL_RGBA8,
+                                                 GL_COMPRESSED_RGB8_ETC2,
+                                                 GL_COMPRESSED_RGBA8_ETC2_EAC,
+                                                 GL_COMPRESSED_RGB8_PUNCHTHROUGH_ALPHA1_ETC2,
+                                                 GL_COMPRESSED_RGBA_ASTC_4x4,
+                                                 GL_COMPRESSED_RGBA_ASTC_5x4,
+                                                 GL_COMPRESSED_RGBA_ASTC_5x5,
+                                                 GL_COMPRESSED_RGBA_ASTC_6x5,
+                                                 GL_COMPRESSED_RGBA_ASTC_6x6,
+                                                 GL_COMPRESSED_RGBA_ASTC_8x5,
+                                                 GL_COMPRESSED_RGBA_ASTC_8x6,
+                                                 GL_COMPRESSED_RGBA_ASTC_8x8,
+                                                 GL_COMPRESSED_RGBA_ASTC_10x5,
+                                                 GL_COMPRESSED_RGBA_ASTC_10x6,
+                                                 GL_COMPRESSED_RGBA_ASTC_10x8,
+                                                 GL_COMPRESSED_RGBA_ASTC_10x10,
+                                                 GL_COMPRESSED_RGBA_ASTC_12x10,
+                                                 GL_COMPRESSED_RGBA_ASTC_12x12};
+    std::vector<GLenum> optionalS3TCLinearFormats = {
+        GL_COMPRESSED_RGB_S3TC_DXT1_EXT, GL_COMPRESSED_RGBA_S3TC_DXT1_EXT,
+        GL_COMPRESSED_RGBA_S3TC_DXT3_EXT, GL_COMPRESSED_RGBA_S3TC_DXT5_EXT};
+    std::vector<GLenum> optionalR8LinearFormats   = {GL_R8};
+    std::vector<GLenum> optionalBPTCLinearFormats = {GL_COMPRESSED_RGBA_BPTC_UNORM_EXT};
+
+    if (!vk::FormatReinterpretationSupported(optionalLinearFormats, rendererVk,
+                                             kNonLinearColorspace))
+    {
+        return false;
+    }
+
+    if (supportedExtensions.textureCompressionS3TCsRGB == true)
+    {
+        if (!vk::FormatReinterpretationSupported(optionalS3TCLinearFormats, rendererVk,
+                                                 kNonLinearColorspace))
+        {
+            return false;
+        }
+    }
+
+    if (supportedExtensions.sRGBR8EXT == true)
+    {
+        if (!vk::FormatReinterpretationSupported(optionalR8LinearFormats, rendererVk,
+                                                 kNonLinearColorspace))
+        {
+            return false;
+        }
+    }
+
+    // TODO: http://anglebug.com/4932 check EXT_texture_sRGB_RG8
+
+    if (supportedExtensions.textureCompressionBPTC == true)
+    {
+        if (!vk::FormatReinterpretationSupported(optionalBPTCLinearFormats, rendererVk,
+                                                 kNonLinearColorspace))
+        {
+            return false;
+        }
+    }
+
+    return true;
+}
+}  // namespace
+}  // namespace vk
+
 GLint LimitToInt(const uint32_t physicalDeviceValue)
 {
     // Limit to INT_MAX / 2 instead of INT_MAX.  If the limit is queried as float, the imprecision
@@ -55,9 +185,19 @@ void RendererVk::ensureCapsInitialized() const
         (mPhysicalDeviceFeatures.textureCompressionETC2 == VK_TRUE) &&
         gl::DetermineCompressedTextureETCSupport(mNativeTextureCaps);
 
-    // Vulkan technically only supports the LDR profile but driver all appear to support the HDR
-    // profile as well. http://anglebug.com/1185#c8
-    mNativeExtensions.textureCompressionASTCHDRKHR = mNativeExtensions.textureCompressionASTCLDRKHR;
+    // Vulkan doesn't support ASTC 3D block textures, which are required by
+    // GL_OES_texture_compression_astc.
+    mNativeExtensions.textureCompressionASTCOES = false;
+
+    // Vulkan doesn't guarantee HDR blocks decoding without VK_EXT_texture_compression_astc_hdr.
+    mNativeExtensions.textureCompressionASTCHDRKHR = false;
+
+    // Vulkan supports sliced 3D ASTC texture uploads when ASTC is supported.
+    mNativeExtensions.textureCompressionSliced3dASTCKHR =
+        mNativeExtensions.textureCompressionASTCLDRKHR;
+
+    // Enable EXT_compressed_ETC1_RGB8_sub_texture
+    mNativeExtensions.compressedETC1RGB8SubTexture = mNativeExtensions.compressedETC1RGB8TextureOES;
 
     // Enable this for simple buffer readback testing, but some functionality is missing.
     // TODO(jmadill): Support full mapBufferRange extension.
@@ -68,11 +208,19 @@ void RendererVk::ensureCapsInitialized() const
     mNativeExtensions.fragDepth              = true;
     mNativeExtensions.framebufferBlit        = true;
     mNativeExtensions.framebufferMultisample = true;
-    mNativeExtensions.copyTexture            = true;
-    mNativeExtensions.copyCompressedTexture  = true;
-    mNativeExtensions.debugMarker            = true;
+    mNativeExtensions.multisampledRenderToTexture =
+        getFeatures().enableMultisampledRenderToTexture.enabled;
+    mNativeExtensions.multisampledRenderToTexture2 =
+        getFeatures().enableMultisampledRenderToTexture.enabled;
+    mNativeExtensions.textureStorageMultisample2DArrayOES =
+        (limitsVk.standardSampleLocations == VK_TRUE);
+    mNativeExtensions.copyTexture           = true;
+    mNativeExtensions.copyTexture3d         = true;
+    mNativeExtensions.copyCompressedTexture = true;
+    mNativeExtensions.debugMarker           = true;
     mNativeExtensions.robustness =
-        !IsSwiftshader(mPhysicalDeviceProperties.vendorID, mPhysicalDeviceProperties.deviceID);
+        !IsSwiftshader(mPhysicalDeviceProperties.vendorID, mPhysicalDeviceProperties.deviceID) &&
+        !IsARM(mPhysicalDeviceProperties.vendorID);
     mNativeExtensions.textureBorderClampOES  = false;  // not implemented yet
     mNativeExtensions.translatedShaderSource = true;
     mNativeExtensions.discardFramebuffer     = true;
@@ -90,12 +238,18 @@ void RendererVk::ensureCapsInitialized() const
     // Enable EXT_blend_minmax
     mNativeExtensions.blendMinMax = true;
 
-    mNativeExtensions.eglImageOES              = true;
-    mNativeExtensions.eglImageExternalOES      = true;
-    mNativeExtensions.eglImageExternalEssl3OES = true;
+    // Enable OES/EXT_draw_buffers_indexed
+    mNativeExtensions.drawBuffersIndexedOES = mPhysicalDeviceFeatures.independentBlend == VK_TRUE;
+    mNativeExtensions.drawBuffersIndexedEXT = mNativeExtensions.drawBuffersIndexedOES;
 
-    mNativeExtensions.memoryObject   = true;
-    mNativeExtensions.memoryObjectFd = getFeatures().supportsExternalMemoryFd.enabled;
+    mNativeExtensions.eglImageOES                  = true;
+    mNativeExtensions.eglImageExternalOES          = true;
+    mNativeExtensions.eglImageExternalWrapModesEXT = true;
+    mNativeExtensions.eglImageExternalEssl3OES     = true;
+    mNativeExtensions.eglImageArray                = true;
+    mNativeExtensions.memoryObject                 = true;
+    mNativeExtensions.memoryObjectFd               = getFeatures().supportsExternalMemoryFd.enabled;
+    mNativeExtensions.memoryObjectFlagsANGLE       = true;
     mNativeExtensions.memoryObjectFuchsiaANGLE =
         getFeatures().supportsExternalMemoryFuchsia.enabled;
 
@@ -146,6 +300,12 @@ void RendererVk::ensureCapsInitialized() const
     // Vulkan natively supports standard derivatives
     mNativeExtensions.standardDerivativesOES = true;
 
+    // Vulkan natively supports texture LOD
+    mNativeExtensions.shaderTextureLOD = true;
+
+    // Vulkan natively supports noperspective interpolation
+    mNativeExtensions.noperspectiveInterpolationNV = true;
+
     // Vulkan natively supports 32-bit indices, entry in kIndexTypeMap
     mNativeExtensions.elementIndexUintOES = true;
 
@@ -154,12 +314,64 @@ void RendererVk::ensureCapsInitialized() const
     // We support getting image data for Textures and Renderbuffers.
     mNativeExtensions.getImageANGLE = true;
 
+    // Implemented in the translator
+    mNativeExtensions.shaderNonConstGlobalInitializersEXT = true;
+
     // Vulkan has no restrictions of the format of cubemaps, so if the proper formats are supported,
     // creating a cube of any of these formats should be implicitly supported.
     mNativeExtensions.depthTextureCubeMapOES =
         mNativeExtensions.depthTextureOES && mNativeExtensions.packedDepthStencilOES;
 
+    // Vulkan natively supports format reinterpretation, but we still require support for all
+    // formats we may reinterpret to
+    mNativeExtensions.textureSRGBOverride =
+        vk::GetTextureSRGBOverrideSupport(this, mNativeExtensions);
+    mNativeExtensions.textureSRGBDecode = vk::GetTextureSRGBDecodeSupport(this);
+
     mNativeExtensions.gpuShader5EXT = vk::CanSupportGPUShader5EXT(mPhysicalDeviceFeatures);
+
+    mNativeExtensions.textureFilteringCHROMIUM = getFeatures().supportsFilteringPrecision.enabled;
+
+    // Only expose texture cubemap array if the physical device supports it.
+    mNativeExtensions.textureCubeMapArrayOES = getFeatures().supportsImageCubeArray.enabled;
+    mNativeExtensions.textureCubeMapArrayEXT = mNativeExtensions.textureCubeMapArrayOES;
+
+    mNativeExtensions.shadowSamplersEXT = true;
+
+    // From the Vulkan specs:
+    // sampleRateShading specifies whether Sample Shading and multisample interpolation are
+    // supported. If this feature is not enabled, the sampleShadingEnable member of the
+    // VkPipelineMultisampleStateCreateInfo structure must be set to VK_FALSE and the
+    // minSampleShading member is ignored. This also specifies whether shader modules can declare
+    // the SampleRateShading capability
+    bool supportSampleRateShading      = (mPhysicalDeviceFeatures.sampleRateShading == VK_TRUE);
+    mNativeExtensions.sampleShadingOES = supportSampleRateShading;
+
+    mNativeCaps.minInterpolationOffset          = limitsVk.minInterpolationOffset;
+    mNativeCaps.maxInterpolationOffset          = limitsVk.maxInterpolationOffset;
+    mNativeCaps.subPixelInterpolationOffsetBits = limitsVk.subPixelInterpolationOffsetBits;
+
+    // From the Vulkan spec:
+    //
+    // > The values minInterpolationOffset and maxInterpolationOffset describe the closed interval
+    // > of supported interpolation offsets : [ minInterpolationOffset, maxInterpolationOffset ].
+    // > The ULP is determined by subPixelInterpolationOffsetBits. If
+    // > subPixelInterpolationOffsetBits is 4, this provides increments of(1 / 2^4) = 0.0625, and
+    // > thus the range of supported interpolation offsets would be[-0.5, 0.4375]
+    //
+    // OES_shader_multisample_interpolation requires a maximum value of -0.5 for
+    // MIN_FRAGMENT_INTERPOLATION_OFFSET_OES and minimum 0.5 for
+    // MAX_FRAGMENT_INTERPOLATION_OFFSET_OES.  Vulkan has an identical limit for
+    // minInterpolationOffset, but it's limit for maxInterpolationOffset is 0.5-(1/ULP).
+    // OES_shader_multisample_interpolation is therefore only supported if
+    // maxInterpolationOffset is at least 0.5.
+    mNativeExtensions.multisampleInterpolationOES =
+        supportSampleRateShading && (mNativeCaps.maxInterpolationOffset >= 0.5);
+
+    mNativeExtensions.shaderImageAtomicOES =
+        ((mPhysicalDeviceFeatures.vertexPipelineStoresAndAtomics == VK_TRUE) &&
+         (mPhysicalDeviceFeatures.fragmentStoresAndAtomics == VK_TRUE) &&
+         getFeatures().supportsShaderImageFloat32Atomics.enabled);
 
     // https://vulkan.lunarg.com/doc/view/1.0.30.0/linux/vkspec.chunked/ch31s02.html
     mNativeCaps.maxElementIndex  = std::numeric_limits<GLuint>::max() - 1;
@@ -190,18 +402,14 @@ void RendererVk::ensureCapsInitialized() const
         limitsVk.sampledImageColorSampleCounts & vk_gl::kSupportedSampleCounts;
     mNativeCaps.maxDepthTextureSamples =
         limitsVk.sampledImageDepthSampleCounts & vk_gl::kSupportedSampleCounts;
-    // TODO (ianelliott): Should mask this with vk_gl::kSupportedSampleCounts, but it causes
-    // end2end test failures with SwiftShader because SwiftShader returns a sample count of 1 in
-    // sampledImageIntegerSampleCounts.
-    // See: http://anglebug.com/4197
-    mNativeCaps.maxIntegerSamples = limitsVk.sampledImageIntegerSampleCounts;
+    mNativeCaps.maxIntegerSamples =
+        limitsVk.sampledImageIntegerSampleCounts & vk_gl::kSupportedSampleCounts;
 
     mNativeCaps.maxVertexAttributes     = LimitToInt(limitsVk.maxVertexInputAttributes);
     mNativeCaps.maxVertexAttribBindings = LimitToInt(limitsVk.maxVertexInputBindings);
     // Offset and stride are stored as uint16_t in PackedAttribDesc.
     mNativeCaps.maxVertexAttribRelativeOffset =
-        std::min(static_cast<uint32_t>(std::numeric_limits<uint16_t>::max()),
-                 limitsVk.maxVertexInputAttributeOffset);
+        std::min((1u << kAttributeOffsetMaxBits) - 1, limitsVk.maxVertexInputAttributeOffset);
     mNativeCaps.maxVertexAttribStride =
         std::min(static_cast<uint32_t>(std::numeric_limits<uint16_t>::max()),
                  limitsVk.maxVertexInputBindingStride);
@@ -389,7 +597,7 @@ void RendererVk::ensureCapsInitialized() const
     mNativeCaps.maxAtomicCounterBufferSize = LimitToInt(limitsVk.maxStorageBufferRange);
 
     // There is no particular limit to how many atomic counters there can be, other than the size of
-    // a storage buffer.  We nevertheless limit this to something sane (4096 arbitrarily).
+    // a storage buffer.  We nevertheless limit this to something reasonable (4096 arbitrarily).
     const int32_t maxAtomicCounters =
         std::min<int32_t>(4096, limitsVk.maxStorageBufferRange / sizeof(uint32_t));
     for (gl::ShaderType shaderType : gl::AllShaderTypes())
@@ -401,10 +609,15 @@ void RendererVk::ensureCapsInitialized() const
     // GL Images correspond to Vulkan Storage Images.
     const int32_t maxPerStageImages = LimitToInt(limitsVk.maxPerStageDescriptorStorageImages);
     const int32_t maxCombinedImages = LimitToInt(limitsVk.maxDescriptorSetStorageImages);
-    for (gl::ShaderType shaderType : gl::AllShaderTypes())
-    {
-        mNativeCaps.maxShaderImageUniforms[shaderType] = maxPerStageImages;
-    }
+
+    mNativeCaps.maxShaderImageUniforms[gl::ShaderType::Vertex] =
+        mPhysicalDeviceFeatures.vertexPipelineStoresAndAtomics ? maxPerStageImages : 0;
+    mNativeCaps.maxShaderImageUniforms[gl::ShaderType::Fragment] =
+        mPhysicalDeviceFeatures.fragmentStoresAndAtomics ? maxPerStageImages : 0;
+    mNativeCaps.maxShaderImageUniforms[gl::ShaderType::Geometry] =
+        mPhysicalDeviceFeatures.vertexPipelineStoresAndAtomics ? maxPerStageImages : 0;
+    mNativeCaps.maxShaderImageUniforms[gl::ShaderType::Compute] = maxPerStageImages;
+
     mNativeCaps.maxCombinedImageUniforms = maxCombinedImages;
     mNativeCaps.maxImageUnits            = maxCombinedImages;
 
@@ -416,9 +629,13 @@ void RendererVk::ensureCapsInitialized() const
     // There is no additional limit to the combined number of components.  We can have up to a
     // maximum number of uniform buffers, each having the maximum number of components.  Note that
     // this limit includes both components in and out of uniform buffers.
-    const uint32_t maxCombinedUniformComponents =
-        (maxPerStageUniformBuffers + kReservedPerStageDefaultUniformBindingCount) *
-        maxUniformComponents;
+    //
+    // This value is limited to INT_MAX to avoid overflow when queried from glGetIntegerv().
+    const uint64_t maxCombinedUniformComponents =
+        std::min<uint64_t>(static_cast<uint64_t>(maxPerStageUniformBuffers +
+                                                 kReservedPerStageDefaultUniformBindingCount) *
+                               maxUniformComponents,
+                           std::numeric_limits<GLint>::max());
     for (gl::ShaderType shaderType : gl::AllShaderTypes())
     {
         mNativeCaps.maxCombinedShaderUniformComponents[shaderType] = maxCombinedUniformComponents;
@@ -521,6 +738,14 @@ void RendererVk::ensureCapsInitialized() const
         mNativeCaps.maxGeometryShaderInvocations =
             LimitToInt(limitsVk.maxGeometryShaderInvocations);
     }
+
+    // GL_APPLE_clip_distance/GL_EXT_clip_cull_distance
+    if (mPhysicalDeviceFeatures.shaderClipDistance && limitsVk.maxClipDistances >= 8)
+    {
+        mNativeExtensions.clipDistanceAPPLE = true;
+        mNativeCaps.maxClipDistances =
+            std::min<GLuint>(limitsVk.maxClipDistances, gl::IMPLEMENTATION_MAX_CLIP_DISTANCES);
+    }
 }
 
 namespace vk
@@ -575,15 +800,19 @@ EGLint ComputeMaximumPBufferPixels(const VkPhysicalDeviceProperties &physicalDev
 
 // Generates a basic config for a combination of color format, depth stencil format and sample
 // count.
-egl::Config GenerateDefaultConfig(const RendererVk *renderer,
+egl::Config GenerateDefaultConfig(DisplayVk *display,
                                   const gl::InternalFormat &colorFormat,
                                   const gl::InternalFormat &depthStencilFormat,
                                   EGLint sampleCount)
 {
+    const RendererVk *renderer = display->getRenderer();
+
     const VkPhysicalDeviceProperties &physicalDeviceProperties =
         renderer->getPhysicalDeviceProperties();
     gl::Version maxSupportedESVersion = renderer->getMaxSupportedESVersion();
 
+    // ES3 features are required to emulate ES1
+    EGLint es1Support = (maxSupportedESVersion.major >= 3 ? EGL_OPENGL_ES_BIT : 0);
     EGLint es2Support = (maxSupportedESVersion.major >= 2 ? EGL_OPENGL_ES2_BIT : 0);
     EGLint es3Support = (maxSupportedESVersion.major >= 3 ? EGL_OPENGL_ES3_BIT : 0);
 
@@ -601,7 +830,7 @@ egl::Config GenerateDefaultConfig(const RendererVk *renderer,
     config.bindToTextureRGBA  = colorFormat.format == GL_RGBA || colorFormat.format == GL_BGRA_EXT;
     config.colorBufferType    = EGL_RGB_BUFFER;
     config.configCaveat       = GetConfigCaveat(colorFormat.internalFormat);
-    config.conformant         = es2Support | es3Support;
+    config.conformant         = es1Support | es2Support | es3Support;
     config.depthSize          = depthStencilFormat.depthBits;
     config.stencilSize        = depthStencilFormat.stencilBits;
     config.level              = 0;
@@ -612,9 +841,9 @@ egl::Config GenerateDefaultConfig(const RendererVk *renderer,
     config.maxSwapInterval    = 1;
     config.minSwapInterval    = 0;
     config.nativeRenderable   = EGL_TRUE;
-    config.nativeVisualID     = 0;
+    config.nativeVisualID     = static_cast<EGLint>(GetNativeVisualID(colorFormat));
     config.nativeVisualType   = EGL_NONE;
-    config.renderableType     = es2Support | es3Support;
+    config.renderableType     = es1Support | es2Support | es3Support;
     config.sampleBuffers      = (sampleCount > 0) ? 1 : 0;
     config.samples            = sampleCount;
     config.surfaceType        = EGL_WINDOW_BIT | EGL_PBUFFER_BIT;
@@ -627,6 +856,11 @@ egl::Config GenerateDefaultConfig(const RendererVk *renderer,
     config.transparentBlueValue  = 0;
     config.colorComponentType =
         gl_egl::GLComponentTypeToEGLColorComponentType(colorFormat.componentType);
+
+    // Vulkan always supports off-screen rendering.  Check the config with display to see if it can
+    // also have window support.  If not, the following call should automatically remove
+    // EGL_WINDOW_BIT.
+    display->checkConfigSupport(&config);
 
     return config;
 }
@@ -694,12 +928,9 @@ egl::ConfigSet GenerateConfigs(const GLenum *colorFormats,
 
             for (EGLint sampleCount : *configSampleCounts)
             {
-                egl::Config config = GenerateDefaultConfig(display->getRenderer(), colorFormatInfo,
+                egl::Config config = GenerateDefaultConfig(display, colorFormatInfo,
                                                            depthStencilFormatInfo, sampleCount);
-                if (display->checkConfigSupport(&config))
-                {
-                    configSet.add(config);
-                }
+                configSet.add(config);
             }
         }
     }

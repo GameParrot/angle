@@ -128,6 +128,20 @@ angle::CallCapture CaptureGetRenderbufferImageANGLE(const State &glState,
                                                     GLenum type,
                                                     void *pixels);
 
+// GL_ANGLE_get_tex_level_parameter
+angle::CallCapture CaptureGetTexLevelParameterivANGLE(const State &glState,
+                                                      bool isCallValid,
+                                                      TextureTarget targetPacked,
+                                                      GLint level,
+                                                      GLenum pname,
+                                                      GLint *params);
+angle::CallCapture CaptureGetTexLevelParameterfvANGLE(const State &glState,
+                                                      bool isCallValid,
+                                                      TextureTarget targetPacked,
+                                                      GLint level,
+                                                      GLenum pname,
+                                                      GLfloat *params);
+
 // GL_ANGLE_instanced_arrays
 angle::CallCapture CaptureDrawArraysInstancedANGLE(const State &glState,
                                                    bool isCallValid,
@@ -146,6 +160,56 @@ angle::CallCapture CaptureVertexAttribDivisorANGLE(const State &glState,
                                                    bool isCallValid,
                                                    GLuint index,
                                                    GLuint divisor);
+
+// GL_ANGLE_memory_object_flags
+angle::CallCapture CaptureTexStorageMemFlags2DANGLE(const State &glState,
+                                                    bool isCallValid,
+                                                    TextureType targetPacked,
+                                                    GLsizei levels,
+                                                    GLenum internalFormat,
+                                                    GLsizei width,
+                                                    GLsizei height,
+                                                    MemoryObjectID memoryPacked,
+                                                    GLuint64 offset,
+                                                    GLbitfield createFlags,
+                                                    GLbitfield usageFlags);
+angle::CallCapture CaptureTexStorageMemFlags2DMultisampleANGLE(const State &glState,
+                                                               bool isCallValid,
+                                                               TextureType targetPacked,
+                                                               GLsizei samples,
+                                                               GLenum internalFormat,
+                                                               GLsizei width,
+                                                               GLsizei height,
+                                                               GLboolean fixedSampleLocations,
+                                                               MemoryObjectID memoryPacked,
+                                                               GLuint64 offset,
+                                                               GLbitfield createFlags,
+                                                               GLbitfield usageFlags);
+angle::CallCapture CaptureTexStorageMemFlags3DANGLE(const State &glState,
+                                                    bool isCallValid,
+                                                    TextureType targetPacked,
+                                                    GLsizei levels,
+                                                    GLenum internalFormat,
+                                                    GLsizei width,
+                                                    GLsizei height,
+                                                    GLsizei depth,
+                                                    MemoryObjectID memoryPacked,
+                                                    GLuint64 offset,
+                                                    GLbitfield createFlags,
+                                                    GLbitfield usageFlags);
+angle::CallCapture CaptureTexStorageMemFlags3DMultisampleANGLE(const State &glState,
+                                                               bool isCallValid,
+                                                               TextureType targetPacked,
+                                                               GLsizei samples,
+                                                               GLenum internalFormat,
+                                                               GLsizei width,
+                                                               GLsizei height,
+                                                               GLsizei depth,
+                                                               GLboolean fixedSampleLocations,
+                                                               MemoryObjectID memoryPacked,
+                                                               GLuint64 offset,
+                                                               GLbitfield createFlags,
+                                                               GLbitfield usageFlags);
 
 // GL_ANGLE_memory_object_fuchsia
 angle::CallCapture CaptureImportMemoryZirconHandleANGLE(const State &glState,
@@ -730,18 +794,6 @@ angle::CallCapture CaptureTexStorage2DMultisampleANGLE(const State &glState,
                                                        GLsizei width,
                                                        GLsizei height,
                                                        GLboolean fixedsamplelocations);
-angle::CallCapture CaptureGetTexLevelParameterivANGLE(const State &glState,
-                                                      bool isCallValid,
-                                                      TextureTarget targetPacked,
-                                                      GLint level,
-                                                      GLenum pname,
-                                                      GLint *params);
-angle::CallCapture CaptureGetTexLevelParameterfvANGLE(const State &glState,
-                                                      bool isCallValid,
-                                                      TextureTarget targetPacked,
-                                                      GLint level,
-                                                      GLenum pname,
-                                                      GLfloat *params);
 angle::CallCapture CaptureGetMultisamplefvANGLE(const State &glState,
                                                 bool isCallValid,
                                                 GLenum pname,
@@ -807,13 +859,6 @@ angle::CallCapture CaptureCopySubTextureCHROMIUM(const State &glState,
 angle::CallCapture CaptureCoverageModulationCHROMIUM(const State &glState,
                                                      bool isCallValid,
                                                      GLenum components);
-angle::CallCapture CaptureMatrixLoadfCHROMIUM(const State &glState,
-                                              bool isCallValid,
-                                              GLenum matrixMode,
-                                              const GLfloat *matrix);
-angle::CallCapture CaptureMatrixLoadIdentityCHROMIUM(const State &glState,
-                                                     bool isCallValid,
-                                                     GLenum matrixMode);
 
 // GL_CHROMIUM_lose_context
 angle::CallCapture CaptureLoseContextCHROMIUM(const State &glState,
@@ -821,155 +866,7 @@ angle::CallCapture CaptureLoseContextCHROMIUM(const State &glState,
                                               GraphicsResetStatus currentPacked,
                                               GraphicsResetStatus otherPacked);
 
-// GL_CHROMIUM_path_rendering
-angle::CallCapture CaptureGenPathsCHROMIUM(const State &glState,
-                                           bool isCallValid,
-                                           GLsizei range,
-                                           GLuint returnValue);
-angle::CallCapture CaptureDeletePathsCHROMIUM(const State &glState,
-                                              bool isCallValid,
-                                              PathID firstPacked,
-                                              GLsizei range);
-angle::CallCapture CaptureIsPathCHROMIUM(const State &glState,
-                                         bool isCallValid,
-                                         PathID pathPacked,
-                                         GLboolean returnValue);
-angle::CallCapture CapturePathCommandsCHROMIUM(const State &glState,
-                                               bool isCallValid,
-                                               PathID pathPacked,
-                                               GLsizei numCommands,
-                                               const GLubyte *commands,
-                                               GLsizei numCoords,
-                                               GLenum coordType,
-                                               const void *coords);
-angle::CallCapture CapturePathParameterfCHROMIUM(const State &glState,
-                                                 bool isCallValid,
-                                                 PathID pathPacked,
-                                                 GLenum pname,
-                                                 GLfloat value);
-angle::CallCapture CapturePathParameteriCHROMIUM(const State &glState,
-                                                 bool isCallValid,
-                                                 PathID pathPacked,
-                                                 GLenum pname,
-                                                 GLint value);
-angle::CallCapture CaptureGetPathParameterfvCHROMIUM(const State &glState,
-                                                     bool isCallValid,
-                                                     PathID pathPacked,
-                                                     GLenum pname,
-                                                     GLfloat *value);
-angle::CallCapture CaptureGetPathParameterivCHROMIUM(const State &glState,
-                                                     bool isCallValid,
-                                                     PathID pathPacked,
-                                                     GLenum pname,
-                                                     GLint *value);
-angle::CallCapture CapturePathStencilFuncCHROMIUM(const State &glState,
-                                                  bool isCallValid,
-                                                  GLenum func,
-                                                  GLint ref,
-                                                  GLuint mask);
-angle::CallCapture CaptureStencilFillPathCHROMIUM(const State &glState,
-                                                  bool isCallValid,
-                                                  PathID pathPacked,
-                                                  GLenum fillMode,
-                                                  GLuint mask);
-angle::CallCapture CaptureStencilStrokePathCHROMIUM(const State &glState,
-                                                    bool isCallValid,
-                                                    PathID pathPacked,
-                                                    GLint reference,
-                                                    GLuint mask);
-angle::CallCapture CaptureCoverFillPathCHROMIUM(const State &glState,
-                                                bool isCallValid,
-                                                PathID pathPacked,
-                                                GLenum coverMode);
-angle::CallCapture CaptureCoverStrokePathCHROMIUM(const State &glState,
-                                                  bool isCallValid,
-                                                  PathID pathPacked,
-                                                  GLenum coverMode);
-angle::CallCapture CaptureStencilThenCoverFillPathCHROMIUM(const State &glState,
-                                                           bool isCallValid,
-                                                           PathID pathPacked,
-                                                           GLenum fillMode,
-                                                           GLuint mask,
-                                                           GLenum coverMode);
-angle::CallCapture CaptureStencilThenCoverStrokePathCHROMIUM(const State &glState,
-                                                             bool isCallValid,
-                                                             PathID pathPacked,
-                                                             GLint reference,
-                                                             GLuint mask,
-                                                             GLenum coverMode);
-angle::CallCapture CaptureCoverFillPathInstancedCHROMIUM(const State &glState,
-                                                         bool isCallValid,
-                                                         GLsizei numPath,
-                                                         GLenum pathNameType,
-                                                         const void *paths,
-                                                         PathID pathBasePacked,
-                                                         GLenum coverMode,
-                                                         GLenum transformType,
-                                                         const GLfloat *transformValues);
-angle::CallCapture CaptureCoverStrokePathInstancedCHROMIUM(const State &glState,
-                                                           bool isCallValid,
-                                                           GLsizei numPath,
-                                                           GLenum pathNameType,
-                                                           const void *paths,
-                                                           PathID pathBasePacked,
-                                                           GLenum coverMode,
-                                                           GLenum transformType,
-                                                           const GLfloat *transformValues);
-angle::CallCapture CaptureStencilStrokePathInstancedCHROMIUM(const State &glState,
-                                                             bool isCallValid,
-                                                             GLsizei numPath,
-                                                             GLenum pathNameType,
-                                                             const void *paths,
-                                                             PathID pathBasePacked,
-                                                             GLint reference,
-                                                             GLuint mask,
-                                                             GLenum transformType,
-                                                             const GLfloat *transformValues);
-angle::CallCapture CaptureStencilFillPathInstancedCHROMIUM(const State &glState,
-                                                           bool isCallValid,
-                                                           GLsizei numPaths,
-                                                           GLenum pathNameType,
-                                                           const void *paths,
-                                                           PathID pathBasePacked,
-                                                           GLenum fillMode,
-                                                           GLuint mask,
-                                                           GLenum transformType,
-                                                           const GLfloat *transformValues);
-angle::CallCapture CaptureStencilThenCoverFillPathInstancedCHROMIUM(const State &glState,
-                                                                    bool isCallValid,
-                                                                    GLsizei numPaths,
-                                                                    GLenum pathNameType,
-                                                                    const void *paths,
-                                                                    PathID pathBasePacked,
-                                                                    GLenum fillMode,
-                                                                    GLuint mask,
-                                                                    GLenum coverMode,
-                                                                    GLenum transformType,
-                                                                    const GLfloat *transformValues);
-angle::CallCapture CaptureStencilThenCoverStrokePathInstancedCHROMIUM(
-    const State &glState,
-    bool isCallValid,
-    GLsizei numPaths,
-    GLenum pathNameType,
-    const void *paths,
-    PathID pathBasePacked,
-    GLint reference,
-    GLuint mask,
-    GLenum coverMode,
-    GLenum transformType,
-    const GLfloat *transformValues);
-angle::CallCapture CaptureBindFragmentInputLocationCHROMIUM(const State &glState,
-                                                            bool isCallValid,
-                                                            ShaderProgramID programsPacked,
-                                                            GLint location,
-                                                            const GLchar *name);
-angle::CallCapture CaptureProgramPathFragmentInputGenCHROMIUM(const State &glState,
-                                                              bool isCallValid,
-                                                              ShaderProgramID programPacked,
-                                                              GLint location,
-                                                              GLenum genMode,
-                                                              GLint components,
-                                                              const GLfloat *coeffs);
+// GL_EXT_EGL_image_array
 
 // GL_EXT_blend_func_extended
 angle::CallCapture CaptureBindFragDataLocationEXT(const State &glState,
@@ -994,6 +891,33 @@ angle::CallCapture CaptureGetProgramResourceLocationIndexEXT(const State &glStat
                                                              GLenum programInterface,
                                                              const GLchar *name,
                                                              GLint returnValue);
+
+// GL_EXT_buffer_storage
+angle::CallCapture CaptureBufferStorageEXT(const State &glState,
+                                           bool isCallValid,
+                                           BufferBinding targetPacked,
+                                           GLsizeiptr size,
+                                           const void *data,
+                                           GLbitfield flags);
+
+// GL_EXT_copy_image
+angle::CallCapture CaptureCopyImageSubDataEXT(const State &glState,
+                                              bool isCallValid,
+                                              GLuint srcName,
+                                              GLenum srcTarget,
+                                              GLint srcLevel,
+                                              GLint srcX,
+                                              GLint srcY,
+                                              GLint srcZ,
+                                              GLuint dstName,
+                                              GLenum dstTarget,
+                                              GLint dstLevel,
+                                              GLint dstX,
+                                              GLint dstY,
+                                              GLint dstZ,
+                                              GLsizei srcWidth,
+                                              GLsizei srcHeight,
+                                              GLsizei srcDepth);
 
 // GL_EXT_debug_marker
 angle::CallCapture CaptureInsertEventMarkerEXT(const State &glState,
@@ -1283,8 +1207,8 @@ angle::CallCapture CaptureFramebufferTexture2DMultisampleEXT(const State &glStat
                                                              bool isCallValid,
                                                              GLenum target,
                                                              GLenum attachment,
-                                                             GLenum textarget,
-                                                             GLuint texture,
+                                                             TextureTarget textargetPacked,
+                                                             TextureID texturePacked,
                                                              GLint level,
                                                              GLsizei samples);
 angle::CallCapture CaptureRenderbufferStorageMultisampleEXT(const State &glState,
@@ -1375,6 +1299,20 @@ angle::CallCapture CaptureImportSemaphoreFdEXT(const State &glState,
                                                HandleType handleTypePacked,
                                                GLint fd);
 
+// GL_EXT_texture_buffer
+angle::CallCapture CaptureTexBufferEXT(const State &glState,
+                                       bool isCallValid,
+                                       TextureType targetPacked,
+                                       GLenum internalformat,
+                                       BufferID bufferPacked);
+angle::CallCapture CaptureTexBufferRangeEXT(const State &glState,
+                                            bool isCallValid,
+                                            TextureType targetPacked,
+                                            GLenum internalformat,
+                                            BufferID bufferPacked,
+                                            GLintptr offset,
+                                            GLsizeiptr size);
+
 // GL_EXT_texture_compression_bptc
 
 // GL_EXT_texture_compression_dxt1
@@ -1385,9 +1323,13 @@ angle::CallCapture CaptureImportSemaphoreFdEXT(const State &glState,
 
 // GL_EXT_texture_compression_s3tc_srgb
 
+// GL_EXT_texture_cube_map_array
+
 // GL_EXT_texture_filter_anisotropic
 
 // GL_EXT_texture_format_BGRA8888
+
+// GL_EXT_texture_sRGB_R8
 
 // GL_EXT_texture_storage
 angle::CallCapture CaptureTexStorage1DEXT(const State &glState,
@@ -1526,6 +1468,25 @@ angle::CallCapture CaptureEGLImageTargetTexture2DOES(const State &glState,
                                                      GLeglImageOES image);
 
 // GL_OES_compressed_ETC1_RGB8_texture
+
+// GL_OES_copy_image
+angle::CallCapture CaptureCopyImageSubDataOES(const State &glState,
+                                              bool isCallValid,
+                                              GLuint srcName,
+                                              GLenum srcTarget,
+                                              GLint srcLevel,
+                                              GLint srcX,
+                                              GLint srcY,
+                                              GLint srcZ,
+                                              GLuint dstName,
+                                              GLenum dstTarget,
+                                              GLint dstLevel,
+                                              GLint dstX,
+                                              GLint dstY,
+                                              GLint dstZ,
+                                              GLsizei srcWidth,
+                                              GLsizei srcHeight,
+                                              GLsizei srcDepth);
 
 // GL_OES_depth32
 
@@ -1772,6 +1733,11 @@ angle::CallCapture CaptureQueryMatrixxOES(const State &glState,
                                           GLint *exponent,
                                           GLbitfield returnValue);
 
+// GL_OES_sample_shading
+angle::CallCapture CaptureMinSampleShadingOES(const State &glState,
+                                              bool isCallValid,
+                                              GLfloat value);
+
 // GL_OES_texture_3D
 angle::CallCapture CaptureCompressedTexImage3DOES(const State &glState,
                                                   bool isCallValid,
@@ -1884,6 +1850,20 @@ angle::CallCapture CaptureTexParameterIuivOES(const State &glState,
                                               GLenum pname,
                                               const GLuint *params);
 
+// GL_OES_texture_buffer
+angle::CallCapture CaptureTexBufferOES(const State &glState,
+                                       bool isCallValid,
+                                       TextureType targetPacked,
+                                       GLenum internalformat,
+                                       BufferID bufferPacked);
+angle::CallCapture CaptureTexBufferRangeOES(const State &glState,
+                                            bool isCallValid,
+                                            TextureType targetPacked,
+                                            GLenum internalformat,
+                                            BufferID bufferPacked,
+                                            GLintptr offset,
+                                            GLsizeiptr size);
+
 // GL_OES_texture_cube_map
 angle::CallCapture CaptureGetTexGenfvOES(const State &glState,
                                          bool isCallValid,
@@ -1931,7 +1911,11 @@ angle::CallCapture CaptureTexGenxvOES(const State &glState,
                                       GLenum pname,
                                       const GLfixed *params);
 
+// GL_OES_texture_cube_map_array
+
 // GL_OES_texture_half_float
+
+// GL_OES_texture_stencil8
 
 // GL_OES_texture_storage_multisample_2d_array
 angle::CallCapture CaptureTexStorage3DMultisampleOES(const State &glState,
@@ -2099,6 +2083,20 @@ void CaptureGetRenderbufferImageANGLE_pixels(const State &glState,
                                              GLenum type,
                                              void *pixels,
                                              angle::ParamCapture *paramCapture);
+void CaptureGetTexLevelParameterivANGLE_params(const State &glState,
+                                               bool isCallValid,
+                                               TextureTarget targetPacked,
+                                               GLint level,
+                                               GLenum pname,
+                                               GLint *params,
+                                               angle::ParamCapture *paramCapture);
+void CaptureGetTexLevelParameterfvANGLE_params(const State &glState,
+                                               bool isCallValid,
+                                               TextureTarget targetPacked,
+                                               GLint level,
+                                               GLenum pname,
+                                               GLfloat *params,
+                                               angle::ParamCapture *paramCapture);
 void CaptureDrawElementsInstancedANGLE_indices(const State &glState,
                                                bool isCallValid,
                                                PrimitiveMode modePacked,
@@ -3212,20 +3210,6 @@ void CaptureGetQueryObjectui64vRobustANGLE_params(const State &glState,
                                                   GLsizei *length,
                                                   GLuint64 *params,
                                                   angle::ParamCapture *paramCapture);
-void CaptureGetTexLevelParameterivANGLE_params(const State &glState,
-                                               bool isCallValid,
-                                               TextureTarget targetPacked,
-                                               GLint level,
-                                               GLenum pname,
-                                               GLint *params,
-                                               angle::ParamCapture *paramCapture);
-void CaptureGetTexLevelParameterfvANGLE_params(const State &glState,
-                                               bool isCallValid,
-                                               TextureTarget targetPacked,
-                                               GLint level,
-                                               GLenum pname,
-                                               GLfloat *params,
-                                               angle::ParamCapture *paramCapture);
 void CaptureGetMultisamplefvANGLE_val(const State &glState,
                                       bool isCallValid,
                                       GLenum pname,
@@ -3252,189 +3236,6 @@ void CaptureBindUniformLocationCHROMIUM_name(const State &glState,
                                              UniformLocation locationPacked,
                                              const GLchar *name,
                                              angle::ParamCapture *paramCapture);
-void CaptureMatrixLoadfCHROMIUM_matrix(const State &glState,
-                                       bool isCallValid,
-                                       GLenum matrixMode,
-                                       const GLfloat *matrix,
-                                       angle::ParamCapture *paramCapture);
-void CapturePathCommandsCHROMIUM_commands(const State &glState,
-                                          bool isCallValid,
-                                          PathID pathPacked,
-                                          GLsizei numCommands,
-                                          const GLubyte *commands,
-                                          GLsizei numCoords,
-                                          GLenum coordType,
-                                          const void *coords,
-                                          angle::ParamCapture *paramCapture);
-void CapturePathCommandsCHROMIUM_coords(const State &glState,
-                                        bool isCallValid,
-                                        PathID pathPacked,
-                                        GLsizei numCommands,
-                                        const GLubyte *commands,
-                                        GLsizei numCoords,
-                                        GLenum coordType,
-                                        const void *coords,
-                                        angle::ParamCapture *paramCapture);
-void CaptureGetPathParameterfvCHROMIUM_value(const State &glState,
-                                             bool isCallValid,
-                                             PathID pathPacked,
-                                             GLenum pname,
-                                             GLfloat *value,
-                                             angle::ParamCapture *paramCapture);
-void CaptureGetPathParameterivCHROMIUM_value(const State &glState,
-                                             bool isCallValid,
-                                             PathID pathPacked,
-                                             GLenum pname,
-                                             GLint *value,
-                                             angle::ParamCapture *paramCapture);
-void CaptureCoverFillPathInstancedCHROMIUM_paths(const State &glState,
-                                                 bool isCallValid,
-                                                 GLsizei numPath,
-                                                 GLenum pathNameType,
-                                                 const void *paths,
-                                                 PathID pathBasePacked,
-                                                 GLenum coverMode,
-                                                 GLenum transformType,
-                                                 const GLfloat *transformValues,
-                                                 angle::ParamCapture *paramCapture);
-void CaptureCoverFillPathInstancedCHROMIUM_transformValues(const State &glState,
-                                                           bool isCallValid,
-                                                           GLsizei numPath,
-                                                           GLenum pathNameType,
-                                                           const void *paths,
-                                                           PathID pathBasePacked,
-                                                           GLenum coverMode,
-                                                           GLenum transformType,
-                                                           const GLfloat *transformValues,
-                                                           angle::ParamCapture *paramCapture);
-void CaptureCoverStrokePathInstancedCHROMIUM_paths(const State &glState,
-                                                   bool isCallValid,
-                                                   GLsizei numPath,
-                                                   GLenum pathNameType,
-                                                   const void *paths,
-                                                   PathID pathBasePacked,
-                                                   GLenum coverMode,
-                                                   GLenum transformType,
-                                                   const GLfloat *transformValues,
-                                                   angle::ParamCapture *paramCapture);
-void CaptureCoverStrokePathInstancedCHROMIUM_transformValues(const State &glState,
-                                                             bool isCallValid,
-                                                             GLsizei numPath,
-                                                             GLenum pathNameType,
-                                                             const void *paths,
-                                                             PathID pathBasePacked,
-                                                             GLenum coverMode,
-                                                             GLenum transformType,
-                                                             const GLfloat *transformValues,
-                                                             angle::ParamCapture *paramCapture);
-void CaptureStencilStrokePathInstancedCHROMIUM_paths(const State &glState,
-                                                     bool isCallValid,
-                                                     GLsizei numPath,
-                                                     GLenum pathNameType,
-                                                     const void *paths,
-                                                     PathID pathBasePacked,
-                                                     GLint reference,
-                                                     GLuint mask,
-                                                     GLenum transformType,
-                                                     const GLfloat *transformValues,
-                                                     angle::ParamCapture *paramCapture);
-void CaptureStencilStrokePathInstancedCHROMIUM_transformValues(const State &glState,
-                                                               bool isCallValid,
-                                                               GLsizei numPath,
-                                                               GLenum pathNameType,
-                                                               const void *paths,
-                                                               PathID pathBasePacked,
-                                                               GLint reference,
-                                                               GLuint mask,
-                                                               GLenum transformType,
-                                                               const GLfloat *transformValues,
-                                                               angle::ParamCapture *paramCapture);
-void CaptureStencilFillPathInstancedCHROMIUM_paths(const State &glState,
-                                                   bool isCallValid,
-                                                   GLsizei numPaths,
-                                                   GLenum pathNameType,
-                                                   const void *paths,
-                                                   PathID pathBasePacked,
-                                                   GLenum fillMode,
-                                                   GLuint mask,
-                                                   GLenum transformType,
-                                                   const GLfloat *transformValues,
-                                                   angle::ParamCapture *paramCapture);
-void CaptureStencilFillPathInstancedCHROMIUM_transformValues(const State &glState,
-                                                             bool isCallValid,
-                                                             GLsizei numPaths,
-                                                             GLenum pathNameType,
-                                                             const void *paths,
-                                                             PathID pathBasePacked,
-                                                             GLenum fillMode,
-                                                             GLuint mask,
-                                                             GLenum transformType,
-                                                             const GLfloat *transformValues,
-                                                             angle::ParamCapture *paramCapture);
-void CaptureStencilThenCoverFillPathInstancedCHROMIUM_paths(const State &glState,
-                                                            bool isCallValid,
-                                                            GLsizei numPaths,
-                                                            GLenum pathNameType,
-                                                            const void *paths,
-                                                            PathID pathBasePacked,
-                                                            GLenum fillMode,
-                                                            GLuint mask,
-                                                            GLenum coverMode,
-                                                            GLenum transformType,
-                                                            const GLfloat *transformValues,
-                                                            angle::ParamCapture *paramCapture);
-void CaptureStencilThenCoverFillPathInstancedCHROMIUM_transformValues(
-    const State &glState,
-    bool isCallValid,
-    GLsizei numPaths,
-    GLenum pathNameType,
-    const void *paths,
-    PathID pathBasePacked,
-    GLenum fillMode,
-    GLuint mask,
-    GLenum coverMode,
-    GLenum transformType,
-    const GLfloat *transformValues,
-    angle::ParamCapture *paramCapture);
-void CaptureStencilThenCoverStrokePathInstancedCHROMIUM_paths(const State &glState,
-                                                              bool isCallValid,
-                                                              GLsizei numPaths,
-                                                              GLenum pathNameType,
-                                                              const void *paths,
-                                                              PathID pathBasePacked,
-                                                              GLint reference,
-                                                              GLuint mask,
-                                                              GLenum coverMode,
-                                                              GLenum transformType,
-                                                              const GLfloat *transformValues,
-                                                              angle::ParamCapture *paramCapture);
-void CaptureStencilThenCoverStrokePathInstancedCHROMIUM_transformValues(
-    const State &glState,
-    bool isCallValid,
-    GLsizei numPaths,
-    GLenum pathNameType,
-    const void *paths,
-    PathID pathBasePacked,
-    GLint reference,
-    GLuint mask,
-    GLenum coverMode,
-    GLenum transformType,
-    const GLfloat *transformValues,
-    angle::ParamCapture *paramCapture);
-void CaptureBindFragmentInputLocationCHROMIUM_name(const State &glState,
-                                                   bool isCallValid,
-                                                   ShaderProgramID programsPacked,
-                                                   GLint location,
-                                                   const GLchar *name,
-                                                   angle::ParamCapture *paramCapture);
-void CaptureProgramPathFragmentInputGenCHROMIUM_coeffs(const State &glState,
-                                                       bool isCallValid,
-                                                       ShaderProgramID programPacked,
-                                                       GLint location,
-                                                       GLenum genMode,
-                                                       GLint components,
-                                                       const GLfloat *coeffs,
-                                                       angle::ParamCapture *paramCapture);
 void CaptureBindFragDataLocationEXT_name(const State &glState,
                                          bool isCallValid,
                                          ShaderProgramID programPacked,
@@ -3459,6 +3260,13 @@ void CaptureGetProgramResourceLocationIndexEXT_name(const State &glState,
                                                     GLenum programInterface,
                                                     const GLchar *name,
                                                     angle::ParamCapture *paramCapture);
+void CaptureBufferStorageEXT_data(const State &glState,
+                                  bool isCallValid,
+                                  BufferBinding targetPacked,
+                                  GLsizeiptr size,
+                                  const void *data,
+                                  GLbitfield flags,
+                                  angle::ParamCapture *paramCapture);
 void CaptureInsertEventMarkerEXT_marker(const State &glState,
                                         bool isCallValid,
                                         GLsizei length,
