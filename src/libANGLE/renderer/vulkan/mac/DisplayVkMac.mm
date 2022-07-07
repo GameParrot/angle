@@ -48,7 +48,7 @@ SurfaceImpl *DisplayVkMac::createPbufferFromClientBuffer(const egl::SurfaceState
 
 egl::ConfigSet DisplayVkMac::generateConfigs()
 {
-    constexpr GLenum kColorFormats[] = {GL_BGRA8_EXT, GL_BGRX8_ANGLEX};
+    constexpr GLenum kColorFormats[] = {GL_BGRA8_EXT};
     return egl_vk::GenerateConfigs(kColorFormats, egl_vk::kConfigDepthStencilFormats, this);
 }
 
@@ -75,8 +75,7 @@ DisplayImpl *CreateVulkanMacDisplay(const egl::DisplayState &state)
 
 void DisplayVkMac::generateExtensions(egl::DisplayExtensions *outExtensions) const
 {
-    outExtensions->iosurfaceClientBuffer =
-        getRenderer()->getFeatures().supportsExternalMemoryHost.enabled;
+    outExtensions->iosurfaceClientBuffer = false;
 
     DisplayVk::generateExtensions(outExtensions);
 }
@@ -86,13 +85,7 @@ egl::Error DisplayVkMac::validateClientBuffer(const egl::Config *configuration,
                                               EGLClientBuffer clientBuffer,
                                               const egl::AttributeMap &attribs) const
 {
-    ASSERT(buftype == EGL_IOSURFACE_ANGLE);
-
-    if (!IOSurfaceSurfaceVkMac::ValidateAttributes(this, clientBuffer, attribs))
-    {
-        return egl::EglBadAttribute();
-    }
-    return egl::NoError();
+    return egl::EglBadAttribute();
 }
 
 }  // namespace rx
