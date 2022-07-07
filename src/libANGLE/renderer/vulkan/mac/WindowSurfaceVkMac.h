@@ -28,7 +28,6 @@ class WindowSurfaceVkMac : public WindowSurfaceVk
     angle::Result getCurrentWindowSize(vk::Context *context, gl::Extents *extentsOut) override;
 
     CAMetalLayer *mMetalLayer;
-    id<MTLDevice> mMetalDevice;
 };
 
 }  // namespace rx
