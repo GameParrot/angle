@@ -25,20 +25,17 @@ WindowSurfaceVkMac::WindowSurfaceVkMac(const egl::SurfaceState &surfaceState,
 
 WindowSurfaceVkMac::~WindowSurfaceVkMac()
 {
-    [mMetalDevice release];
     [mMetalLayer release];
 }
 
 angle::Result WindowSurfaceVkMac::createSurfaceVk(vk::Context *context, gl::Extents *extentsOut)
     API_AVAILABLE(macosx(10.11))
 {
-    mMetalDevice = MTLCreateSystemDefaultDevice();
 
     CALayer *layer = reinterpret_cast<CALayer *>(mNativeWindowType);
 
     mMetalLayer        = [[CAMetalLayer alloc] init];
     mMetalLayer.frame  = CGRectMake(0, 0, layer.frame.size.width, layer.frame.size.height);
-    mMetalLayer.device = mMetalDevice;
     mMetalLayer.drawableSize =
         CGSizeMake(mMetalLayer.bounds.size.width * mMetalLayer.contentsScale,
                    mMetalLayer.bounds.size.height * mMetalLayer.contentsScale);
