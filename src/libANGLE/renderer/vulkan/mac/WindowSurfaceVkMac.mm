@@ -36,7 +36,7 @@ angle::Result WindowSurfaceVkMac::createSurfaceVk(vk::Context *context, gl::Exte
     VkMetalSurfaceCreateInfoEXT sci = {};
     memset(&sci, 0, sizeof(sci));
     sci.sType = VK_STRUCTURE_TYPE_METAL_SURFACE_CREATE_INFO_EXT;
-    sci.pLayer = window->ns.layer;
+    sci.pLayer = mMetalLayer;
     ANGLE_VK_TRY(context, vkCreateMetalSurfaceEXT(context->getRenderer()->getInstance(),
                                                   &sci, nullptr, &mSurface));
 
