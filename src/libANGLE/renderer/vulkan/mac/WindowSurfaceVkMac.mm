@@ -49,11 +49,8 @@ angle::Result WindowSurfaceVkMac::getCurrentWindowSize(vk::Context *context,
 {
     ANGLE_VK_CHECK(context, (mMetalLayer != nullptr), VK_ERROR_INITIALIZATION_FAILED);
 
-    mMetalLayer.drawableSize =
-        CGSizeMake(mMetalLayer.bounds.size.width * mMetalLayer.contentsScale,
-                   mMetalLayer.bounds.size.height * mMetalLayer.contentsScale);
-    *extentsOut = gl::Extents(static_cast<int>(mMetalLayer.drawableSize.width),
-                              static_cast<int>(mMetalLayer.drawableSize.height), 1);
+    *extentsOut = gl::Extents(static_cast<int>(mMetalLayer.bounds.size.width * mMetalLayer.contentsScale),
+                              static_cast<int>(mMetalLayer.bounds.size.height * mMetalLayer.contentsScale), 1);
 
     return angle::Result::Continue;
 }
