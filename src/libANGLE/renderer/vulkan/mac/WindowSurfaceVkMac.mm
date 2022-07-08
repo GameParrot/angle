@@ -31,7 +31,7 @@ angle::Result WindowSurfaceVkMac::createSurfaceVk(vk::Context *context, gl::Exte
     API_AVAILABLE(macosx(10.11))
 {
 
-    mMetalLayer *layer = reinterpret_cast<CAMetalLayer *>(mNativeWindowType);
+    mMetalLayer = reinterpret_cast<CAMetalLayer *>(mNativeWindowType);
 
     VkMetalSurfaceCreateInfoEXT sci = {};
     memset(&sci, 0, sizeof(sci));
