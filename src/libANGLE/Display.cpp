@@ -165,6 +165,10 @@ EGLAttrib GetDisplayTypeFromEnvironment()
 #if defined(ANGLE_ENABLE_OPENGL)
     if (angleDefaultEnv == "gl")
     {
+        return EGL_PLATFORM_ANGLE_TYPE_OPENGL_ANGLE;
+    }
+    if (angleDefaultEnv == "gles")
+    {
         return EGL_PLATFORM_ANGLE_TYPE_OPENGLES_ANGLE;
     }
 #endif

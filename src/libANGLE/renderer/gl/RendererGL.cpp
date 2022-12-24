@@ -304,6 +304,8 @@ void RendererGL::generateCaps(gl::Caps *outCaps,
 {
     nativegl_gl::GenerateCaps(mFunctions.get(), mFeatures, outCaps, outTextureCaps, outExtensions,
                               &mMaxSupportedESVersion, &mMultiviewImplementationType);
+    // GL_OES_vertex_half_float
+    outExtensions->vertexHalfFloatOES = true;
 }
 
 GLint RendererGL::getGPUDisjoint()
