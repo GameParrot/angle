@@ -499,22 +499,24 @@ angle::Result VertexArrayGL::streamAttributes(
                 firstIndexForSeparateCopy = 0;
             }
 
-            // Pack the data when copying it, user could have supplied a very large stride that
-            // would cause the buffer to be much larger than needed.
-            if (destStride == sourceStride)
-            {
-                // Can copy in one go, the data is packed
-                memcpy(bufferPointer + curBufferOffset, inputPointer + batchMemcpyInputOffset,
-                       batchMemcpySize);
-            }
-            else
-            {
-                for (size_t vertexIdx = 0; vertexIdx < streamedVertexCount; vertexIdx++)
+            if(inputPointer) {
+                // Pack the data when copying it, user could have supplied a very large stride that
+                // would cause the buffer to be much larger than needed.
+                if (destStride == sourceStride)
                 {
-                    uint8_t *out = bufferPointer + curBufferOffset + (destStride * vertexIdx);
-                    const uint8_t *in =
-                        inputPointer + sourceStride * (vertexIdx + firstIndexForSeparateCopy);
-                    memcpy(out, in, destStride);
+                    // Can copy in one go, the data is packed
+                    memcpy(bufferPointer + curBufferOffset, inputPointer + batchMemcpyInputOffset,
+                        batchMemcpySize);
+                }
+                else
+                {
+                    for (size_t vertexIdx = 0; vertexIdx < streamedVertexCount; vertexIdx++)
+                    {
+                        uint8_t *out = bufferPointer + curBufferOffset + (destStride * vertexIdx);
+                        const uint8_t *in =
+                            inputPointer + sourceStride * (vertexIdx + firstIndexForSeparateCopy);
+                        memcpy(out, in, destStride);
+                    }
                 }
             }
 
