@@ -898,10 +898,6 @@ void DisplayMtl::ensureCapsInitialized() const
     // GL_APPLE_clip_distance
     mNativeCaps.maxClipDistances = 8;
 
-    // minecraft/renderdragon crashs if this capability is missing
-    // GL_OES_vertex_half_float
-    mNativeCaps.vertexHalfFloatOES = true;
-
     // Metal doesn't support GL_TEXTURE_COMPARE_MODE=GL_NONE for shadow samplers
     mNativeLimitations.noShadowSamplerCompareModeNone = true;
 
@@ -1110,6 +1106,10 @@ void DisplayMtl::initializeExtensions() const
     // "The GPUs in Apple3 through Apple8 families only support memory barriers for compute command
     // encoders, and for vertex-to-vertex and vertex-to-fragment stages of render command encoders."
     mHasFragmentMemoryBarriers = !supportsAppleGPUFamily(3);
+
+    // minecraft/renderdragon crashs if this capability is missing
+    // GL_OES_vertex_half_float
+    mNativeExtensions.vertexHalfFloatOES = true;
 }
 
 void DisplayMtl::initializeTextureCaps() const
