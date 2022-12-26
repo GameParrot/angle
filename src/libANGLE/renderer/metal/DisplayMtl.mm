@@ -898,6 +898,10 @@ void DisplayMtl::ensureCapsInitialized() const
     // GL_APPLE_clip_distance
     mNativeCaps.maxClipDistances = 8;
 
+    // minecraft/renderdragon crashs if this capability is missing
+    // GL_OES_vertex_half_float
+    mNativeCaps.vertexHalfFloatOES = true;
+
     // Metal doesn't support GL_TEXTURE_COMPARE_MODE=GL_NONE for shadow samplers
     mNativeLimitations.noShadowSamplerCompareModeNone = true;
 
