@@ -14,6 +14,9 @@
 // These are macros for substitution of Apple specific directive @available:
 
 // TARGET_OS_MACCATALYST only available in MacSDK 10.15
+#ifndef TARGET_OS_MACCATALYST
+#define TARGET_OS_MACCATALYST 0
+#endif
 
 // ANGLE_APPLE_AVAILABLE_XCI: check if either of the 3 platforms (OSX/Catalyst/iOS) min verions is
 // available:
