@@ -15,6 +15,8 @@
 #include <map>
 #include <sstream>
 #include <vector>
+#include <cstdlib>
+#include <string.h>
 
 #include <EGL/eglext.h>
 #include <platform/Platform.h>
@@ -389,6 +391,16 @@ rx::DisplayImpl *CreateDisplayFromAttribs(EGLAttrib displayType,
 #endif  // defined(ANGLE_ENABLE_VULKAN)
             break;
         case EGL_PLATFORM_ANGLE_TYPE_METAL_ANGLE:
+            char *forcegl_val = getenv("ANGLE_FORCE_OPENGL");
+            if (forcegl_val != NULL)
+                if ((strcmp(forcegl_val, "true")) == 0)
+#if defined(ANGLE_ENABLE_OPENGL)
+                    impl = new rx::DisplayCGL(state);
+                    break;
+#else
+                    UNREACHABLE();
+#endif
+
 #if defined(ANGLE_ENABLE_METAL)
             if (rx::IsMetalDisplayAvailable())
             {
