@@ -193,15 +193,15 @@ EGLAttrib GetDisplayTypeFromEnvironment()
     return EGL_PLATFORM_ANGLE_TYPE_D3D9_ANGLE;
 #elif defined(ANGLE_ENABLE_VULKAN) && defined(ANGLE_PLATFORM_ANDROID)
     return EGL_PLATFORM_ANGLE_TYPE_VULKAN_ANGLE;
-#elif defined(ANGLE_ENABLE_METAL)
-    // Prefer metal with opengl fallback over opengl
-    return EGL_PLATFORM_ANGLE_TYPE_METAL_ANGLE;
 #elif defined(ANGLE_ENABLE_OPENGL)
 #    if defined(ANGLE_PLATFORM_ANDROID) || defined(ANGLE_USE_GBM)
     return EGL_PLATFORM_ANGLE_TYPE_OPENGLES_ANGLE;
 #    else
     return EGL_PLATFORM_ANGLE_TYPE_OPENGL_ANGLE;
 #    endif
+#elif defined(ANGLE_ENABLE_METAL)
+    // Prefer metal with opengl fallback over opengl
+    return EGL_PLATFORM_ANGLE_TYPE_METAL_ANGLE;
 #elif defined(ANGLE_ENABLE_VULKAN)
     return EGL_PLATFORM_ANGLE_TYPE_VULKAN_ANGLE;
 #elif defined(ANGLE_ENABLE_NULL)
